@@ -189,6 +189,15 @@ class Batch2DGUI(BaseGUI):
             messagebox.showwarning("警告", "请先设置输出目录")
             return
         
+        # 检查是否有标签文件夹
+        if not self.batch_labels_dir:
+            result = messagebox.askyesno("确认", 
+                "未选择标签文件夹，将跳过没有标签的图像。\n\n"
+                "是否继续处理？\n"
+                "点击'是'继续处理，点击'否'返回选择标签文件夹。")
+            if not result:
+                return
+        
         self.batch_processing = True
         self.process_button.config(text="停止处理")
         self.status_var.set("开始批量处理...")

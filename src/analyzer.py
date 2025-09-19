@@ -665,6 +665,11 @@ def batch_analyze_ff_images(ff_images_dir, roi_masks_dir=None, output_dir=None):
             if not os.path.exists(roi_path):
                 roi_path = None
         
+        # 如果没有ROI掩码，跳过此图像
+        if roi_path is None:
+            print(f"跳过 {ff_file}：未找到对应的ROI掩码")
+            continue
+        
         # 分析单个图像
         result = analyze_ff_image(ff_path, roi_path, output_dir)
         
