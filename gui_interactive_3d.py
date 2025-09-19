@@ -58,6 +58,139 @@ class Interactive3DGUI(BaseGUI):
             slice_idx = self.current_slice
         return f"{view}_{slice_idx}"
     
+    def reverse_rotate_coordinates(self, points, rotation_angle):
+        """反向旋转坐标（从显示坐标转换回原始坐标）"""
+        if rotation_angle == 0:
+            return points
+        
+        # 获取原始图像尺寸
+        if self.ff_image is not None:
+            h, w = self.ff_image.shape[:2]
+        else:
+            return points
+        
+        reversed_points = []
+        for point in points:
+            x, y = point
+            
+            # 反向旋转坐标
+            if rotation_angle == 90:
+                # 90度反向：(x,y) -> (y, h-1-x)
+                new_x = y
+                new_y = h - 1 - x
+            elif rotation_angle == 180:
+                # 180度反向：(x,y) -> (w-1-x, h-1-y)
+                new_x = w - 1 - x
+                new_y = h - 1 - y
+            elif rotation_angle == 270:
+                # 270度反向：(x,y) -> (w-1-y, x)
+                new_x = w - 1 - y
+                new_y = x
+            else:
+                new_x, new_y = x, y
+            
+            reversed_points.append((new_x, new_y))
+        
+        return reversed_points
+    
+    def on_mouse_click(self, event):
+        """鼠标点击事件（3D模式 - 支持旋转）"""
+        if self.ff_image is None:
+            return
+            
+        if self.current_roi_type == 'polygon':
+            # 多边形模式：添加顶点
+            # 考虑图像偏移量
+            adjusted_x = event.x - self.image_offset_x
+            adjusted_y = event.y - self.image_offset_y
+            point = (int(adjusted_x / self.scale_factor), int(adjusted_y / self.scale_factor))
+            
+            # 如果有旋转，需要反向转换坐标
+            if self.rotation_angle != 0:
+                point = self.reverse_rotate_coordinates([point], self.rotation_angle)[0]
+            
+            self.polygon_points.append(point)
+            
+            # 检查是否应该闭合多边形（至少3个点且点击位置接近第一个点）
+            if len(self.polygon_points) >= 3:
+                first_point = self.polygon_points[0]
+                distance = np.sqrt((point[0] - first_point[0])**2 + (point[1] - first_point[1])**2)
+                if distance < 20:  # 20像素范围内认为点击了第一个点
+                    # 闭合多边形
+                    self.polygon_drawing = True
+                    self.save_polygon_roi()
+                    return
+            
+            # 更新显示
+            self.display_image()
+            self.status_var.set(f"多边形模式：已添加{len(self.polygon_points)}个顶点，点击首尾两点闭合")
+        else:
+            # 矩形和圆形模式
+            self.drawing = True
+            # 考虑图像偏移量
+            adjusted_x = event.x - self.image_offset_x
+            adjusted_y = event.y - self.image_offset_y
+            point = (int(adjusted_x / self.scale_factor), int(adjusted_y / self.scale_factor))
+            
+            # 如果有旋转，需要反向转换坐标
+            if self.rotation_angle != 0:
+                point = self.reverse_rotate_coordinates([point], self.rotation_angle)[0]
+            
+            self.start_point = point
+            self.end_point = point
+            self.center_point = point
+            self.radius = 0
+    
+    def on_mouse_drag(self, event):
+        """鼠标拖拽事件（3D模式 - 支持旋转）"""
+        if not self.drawing or self.ff_image is None:
+            return
+        
+        # 考虑图像偏移量
+        adjusted_x = event.x - self.image_offset_x
+        adjusted_y = event.y - self.image_offset_y
+        point = (int(adjusted_x / self.scale_factor), int(adjusted_y / self.scale_factor))
+        
+        # 如果有旋转，需要反向转换坐标
+        if self.rotation_angle != 0:
+            point = self.reverse_rotate_coordinates([point], self.rotation_angle)[0]
+        
+        if self.current_roi_type == 'rectangle':
+            self.end_point = point
+        elif self.current_roi_type == 'circle':
+            # 计算半径
+            dx = point[0] - self.center_point[0]
+            dy = point[1] - self.center_point[1]
+            self.radius = int(np.sqrt(dx*dx + dy*dy))
+        
+        # 更新显示
+        self.display_image()
+    
+    def on_mouse_release(self, event):
+        """鼠标释放事件（3D模式 - 支持旋转）"""
+        if not self.drawing or self.ff_image is None:
+            return
+        
+        # 考虑图像偏移量
+        adjusted_x = event.x - self.image_offset_x
+        adjusted_y = event.y - self.image_offset_y
+        point = (int(adjusted_x / self.scale_factor), int(adjusted_y / self.scale_factor))
+        
+        # 如果有旋转，需要反向转换坐标
+        if self.rotation_angle != 0:
+            point = self.reverse_rotate_coordinates([point], self.rotation_angle)[0]
+        
+        if self.current_roi_type == 'rectangle':
+            self.end_point = point
+        elif self.current_roi_type == 'circle':
+            # 计算半径
+            dx = point[0] - self.center_point[0]
+            dy = point[1] - self.center_point[1]
+            self.radius = int(np.sqrt(dx*dx + dy*dy))
+        
+        # 自动保存ROI
+        self.save_current_roi()
+    
     def on_roi_type_change(self, event):
         """ROI类型改变事件"""
         self.current_roi_type = self.roi_type_var.get()
