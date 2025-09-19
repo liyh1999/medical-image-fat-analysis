@@ -39,7 +39,6 @@ class Interactive2DGUI(BaseGUI):
         # 图像操作按钮
         ttk.Button(self.toolbar, text="打开图像文件夹", command=self.open_interactive_folder).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="打开图像", command=self.open_ff_image).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(self.toolbar, text="打开ROI掩码", command=self.open_roi_mask).pack(side=tk.LEFT, padx=(0, 5))
         
         
         # 图像导航
@@ -209,31 +208,6 @@ class Interactive2DGUI(BaseGUI):
                 messagebox.showerror("错误", f"加载图像失败: {str(e)}")
                 logger.error(f"加载图像失败: {str(e)}")
     
-    def open_roi_mask(self):
-        """打开ROI掩码"""
-        file_path = filedialog.askopenfilename(
-            title="选择ROI掩码",
-            filetypes=[("图像文件", "*.png *.jpg *.jpeg *.tiff *.tif *.bmp"), ("所有文件", "*.*")]
-        )
-        
-        if file_path:
-            try:
-                self.roi_mask = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-                if self.roi_mask is None:
-                    raise ValueError(f"无法加载ROI掩码: {file_path}")
-                
-                # 将掩码转换为ROI列表
-                self.convert_mask_to_roi_list(self.roi_mask)
-                
-                # 显示图像
-                self.display_image()
-                self.update_roi_info()
-                
-                self.status_var.set(f"已加载ROI掩码: {os.path.basename(file_path)}")
-                
-            except Exception as e:
-                messagebox.showerror("错误", f"加载ROI掩码失败: {str(e)}")
-                logger.error(f"加载ROI掩码失败: {str(e)}")
     
     def display_image(self):
         """显示图像"""

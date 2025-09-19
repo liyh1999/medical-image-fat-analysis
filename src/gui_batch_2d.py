@@ -7,6 +7,7 @@ import os
 import cv2
 import numpy as np
 import tkinter as tk
+import logging
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 from utils import logger, natural_sort_key
@@ -77,8 +78,11 @@ class Batch2DGUI(BaseGUI):
         self.batch_results = []
         self.batch_processing = False
         
-    def create_batch_toolbar(self):
+    def create_toolbar(self, parent):
         """创建批量处理模式工具栏"""
+        # 调用父类方法创建工具栏框架
+        super().create_toolbar(parent)
+        
         # 文件夹选择
         ttk.Button(self.toolbar, text="选择图像文件夹", command=self.open_batch_images_folder).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="选择标签文件夹", command=self.open_batch_labels_folder).pack(side=tk.LEFT, padx=(0, 5))
@@ -98,10 +102,26 @@ class Batch2DGUI(BaseGUI):
         ttk.Button(self.toolbar, text="导出结果", command=self.export_batch_results).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="设置输出目录", command=self.set_output_directory).pack(side=tk.LEFT, padx=(0, 5))
         
+        # 调试日志控制
+        self.debug_log_var = tk.BooleanVar()
+        debug_check = ttk.Checkbutton(self.toolbar, text="调试日志", variable=self.debug_log_var, 
+                                    command=self.toggle_debug_log)
+        debug_check.pack(side=tk.LEFT, padx=(10, 0))
         
         # 图像信息显示
         self.batch_index_var = tk.StringVar(value="0/0")
         ttk.Label(self.toolbar, textvariable=self.batch_index_var).pack(side=tk.RIGHT, padx=(5, 0))
+    
+    def toggle_debug_log(self):
+        """切换调试日志显示"""
+        if hasattr(self, 'debug_log_var'):
+            debug_enabled = self.debug_log_var.get()
+            if debug_enabled:
+                logger.setLevel(logging.DEBUG)
+                self.status_var.set("调试日志已启用")
+            else:
+                logger.setLevel(logging.INFO)
+                self.status_var.set("调试日志已禁用")
     
     def handle_mode_specific_keys(self, event):
         """处理批量处理模式特定的快捷键"""

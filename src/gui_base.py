@@ -111,8 +111,8 @@ class BaseGUI:
         self.toolbar = ttk.Frame(parent)
         self.toolbar.pack(fill=tk.X, pady=(0, 5))
         
-        # 创建基础工具栏
-        self.create_interactive_toolbar()
+        # 子类应该重写此方法来创建特定的工具栏
+        # 这里只创建基础的工具栏框架
         
     def create_control_panel(self, parent):
         """创建控制面板"""
