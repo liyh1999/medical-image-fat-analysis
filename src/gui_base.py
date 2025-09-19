@@ -1360,8 +1360,17 @@ class BaseGUI:
         if match:
             # 去掉数字后缀
             clean_base_name = base_name[:match.start()]
+            
+            # 2a. 尝试带_roi后缀的匹配
             for ext in label_extensions:
                 label_file = f"{clean_base_name}_roi{ext}"
+                label_path = os.path.join(self.batch_labels_dir, label_file)
+                if os.path.exists(label_path):
+                    return label_path
+            
+            # 2b. 尝试直接匹配（不带_roi后缀）
+            for ext in label_extensions:
+                label_file = f"{clean_base_name}{ext}"
                 label_path = os.path.join(self.batch_labels_dir, label_file)
                 if os.path.exists(label_path):
                     return label_path
