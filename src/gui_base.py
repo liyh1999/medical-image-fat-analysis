@@ -847,6 +847,8 @@ class BaseGUI:
                 text_x = max(5, center_x - 30)
                 text_y = max(25, center_y - 5)
                 cv2.putText(image, f'ROI{i+1}', (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        
+        return image
     
     def draw_temp_polygon(self, image):
         """绘制临时多边形（正在绘制的多边形）"""

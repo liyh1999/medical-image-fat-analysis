@@ -35,7 +35,7 @@ class Batch2DGUI(BaseGUI):
         
         # 应用旋转
         if self.rotation_angle != 0:
-            rotated_image = self.apply_rotation(self.ff_image)
+            rotated_image = self.apply_rotation(self.ff_image, self.rotation_angle)
         else:
             rotated_image = self.ff_image.copy()
         
@@ -399,12 +399,10 @@ class Batch2DGUI(BaseGUI):
             
             # 显示图像
             self.display_image()
-            self.update_image_info()
-            self.update_roi_info()
             self.update_batch_index()
             
             # 显示处理结果（如果有）
-            if index < len(self.batch_results):
+            if hasattr(self, 'batch_results') and index < len(self.batch_results):
                 self.display_batch_result(index)
             
             self.status_var.set(f"显示图像: {image_file}")
