@@ -106,6 +106,11 @@ class Batch2DGUI(BaseGUI):
         ttk.Button(self.toolbar, text="导出结果", command=self.export_batch_results).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="设置输出目录", command=self.set_output_directory).pack(side=tk.LEFT, padx=(0, 5))
         
+        # 导出选项
+        self.save_individual_json_var = tk.BooleanVar()
+        json_check = ttk.Checkbutton(self.toolbar, text="保存单独JSON", variable=self.save_individual_json_var)
+        json_check.pack(side=tk.LEFT, padx=(10, 0))
+        
         # 调试日志控制
         self.debug_log_var = tk.BooleanVar()
         debug_check = ttk.Checkbutton(self.toolbar, text="调试日志", variable=self.debug_log_var, 
@@ -459,35 +464,36 @@ class Batch2DGUI(BaseGUI):
             return
         
         try:
-            # 保存每幅图的JSON文件
-            for result in self.batch_results:
-                base_name = os.path.splitext(result['image_file'])[0]
-                json_path = os.path.join(self.output_directory, f"{base_name}_roi_data.json")
-                
-                # 准备JSON数据
-                roi_data = []
-                for roi in result['roi_data']:
-                    roi_data.append({
-                        'type': roi['type'],
-                        'fat_fraction': roi['fat_fraction'],
-                        'start': roi.get('start', []),
-                        'end': roi.get('end', []),
-                        'center': roi.get('center', []),
-                        'radius': roi.get('radius', 0),
-                        'points': roi.get('points', [])
-                    })
-                
-                json_data = {
-                    'image_file': result['image_file'],
-                    'roi_count': result['roi_count'],
-                    'roi_data': roi_data,
-                    'mean_fat_fraction': result['mean_fat_fraction']
-                }
-                
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    json.dump(json_data, f, indent=2, ensure_ascii=False)
-                
-                logger.info(f"已保存JSON文件: {json_path}")
+            # 保存每幅图的JSON文件（可选）
+            if self.save_individual_json_var.get():
+                for result in self.batch_results:
+                    base_name = os.path.splitext(result['image_file'])[0]
+                    json_path = os.path.join(self.output_directory, f"{base_name}_roi_data.json")
+                    
+                    # 准备JSON数据
+                    roi_data = []
+                    for roi in result['roi_data']:
+                        roi_data.append({
+                            'type': roi['type'],
+                            'fat_fraction': roi['fat_fraction'],
+                            'start': roi.get('start', []),
+                            'end': roi.get('end', []),
+                            'center': roi.get('center', []),
+                            'radius': roi.get('radius', 0),
+                            'points': roi.get('points', [])
+                        })
+                    
+                    json_data = {
+                        'image_file': result['image_file'],
+                        'roi_count': result['roi_count'],
+                        'roi_data': roi_data,
+                        'mean_fat_fraction': result['mean_fat_fraction']
+                    }
+                    
+                    with open(json_path, 'w', encoding='utf-8') as f:
+                        json.dump(json_data, f, indent=2, ensure_ascii=False)
+                    
+                    logger.info(f"已保存JSON文件: {json_path}")
             
             # 创建汇总表格
             import pandas as pd
@@ -505,20 +511,75 @@ class Batch2DGUI(BaseGUI):
                     })
             
             df = pd.DataFrame(summary_data)
+            
+            # 优化Excel表格显示，合并重复行
             excel_path = os.path.join(self.output_directory, "batch_analysis_results.xlsx")
             try:
-                df.to_excel(excel_path, index=False, engine='openpyxl')
+                with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='ROI分析结果', index=False)
+                    
+                    # 获取工作表对象
+                    worksheet = writer.sheets['ROI分析结果']
+                    
+                    # 合并相同图像文件的单元格
+                    from openpyxl.utils.dataframe import dataframe_to_rows
+                    from openpyxl.styles import Alignment
+                    
+                    # 重新写入数据并合并单元格
+                    worksheet.delete_rows(1, worksheet.max_row)
+                    
+                    # 写入标题行
+                    headers = ['图像文件', 'ROI编号', 'ROI类型', '脂肪分数', '平均脂肪分数', 'ROI总数']
+                    for col, header in enumerate(headers, 1):
+                        cell = worksheet.cell(row=1, column=col)
+                        cell.value = header
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    # 写入数据并合并相同图像文件的单元格
+                    current_row = 2
+                    current_image = None
+                    image_start_row = 2
+                    
+                    for _, row in df.iterrows():
+                        if current_image != row['图像文件']:
+                            # 如果之前有图像需要合并，先合并
+                            if current_image is not None and current_row > image_start_row:
+                                worksheet.merge_cells(f'A{image_start_row}:A{current_row-1}')
+                                worksheet.merge_cells(f'E{image_start_row}:E{current_row-1}')
+                                worksheet.merge_cells(f'F{image_start_row}:F{current_row-1}')
+                            
+                            # 开始新的图像
+                            current_image = row['图像文件']
+                            image_start_row = current_row
+                        
+                        # 写入当前行数据
+                        for col, value in enumerate(row, 1):
+                            cell = worksheet.cell(row=current_row, column=col)
+                            cell.value = value
+                            cell.alignment = Alignment(horizontal='center', vertical='center')
+                        
+                        current_row += 1
+                    
+                    # 合并最后一个图像的单元格
+                    if current_image is not None and current_row > image_start_row:
+                        worksheet.merge_cells(f'A{image_start_row}:A{current_row-1}')
+                        worksheet.merge_cells(f'E{image_start_row}:E{current_row-1}')
+                        worksheet.merge_cells(f'F{image_start_row}:F{current_row-1}')
+                    
+                    # 设置列宽
+                    column_widths = [25, 10, 12, 12, 15, 10]
+                    for col, width in enumerate(column_widths, 1):
+                        worksheet.column_dimensions[worksheet.cell(row=1, column=col).column_letter].width = width
+                
                 logger.info(f"已保存Excel文件: {excel_path}")
-            except:
+            except Exception as e:
                 # 如果Excel保存失败，保存CSV
                 csv_path = os.path.join(self.output_directory, "batch_analysis_results.csv")
                 df.to_csv(csv_path, index=False, encoding='utf-8-sig')
                 logger.info(f"已保存CSV文件: {csv_path}")
+                logger.warning(f"Excel保存失败，已保存CSV: {str(e)}")
             
-            # 保存总的JSON结果
-            json_path = os.path.join(self.output_directory, "batch_results.json")
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(self.batch_results, f, indent=2, ensure_ascii=False)
+            # 不再保存总的JSON结果文件
             
             self.status_var.set(f"结果已导出到: {self.output_directory}")
             messagebox.showinfo("成功", f"结果已导出到: {self.output_directory}")
