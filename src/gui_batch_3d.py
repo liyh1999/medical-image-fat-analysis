@@ -150,10 +150,6 @@ class Batch3DGUI(BaseGUI):
             self.prev_batch_image()
         elif event.keysym in ["Right", "d", "D"]:
             self.next_batch_image()
-        elif event.keysym in ["Up", "w", "W"]:
-            self.prev_batch_slice()
-        elif event.keysym in ["Down", "s", "S"]:
-            self.next_batch_slice()
         elif event.keysym == "v":
             # 切换视图
             views = ["axial", "sagittal", "coronal"]

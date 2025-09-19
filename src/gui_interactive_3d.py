@@ -634,10 +634,6 @@ class Interactive3DGUI(BaseGUI):
             self.prev_slice()
         elif event.keysym in ["Right", "d", "D"]:
             self.next_slice()
-        elif event.keysym in ["Up", "w", "W"]:
-            self.prev_slice()
-        elif event.keysym in ["Down", "x", "X"]:
-            self.next_slice()
         elif event.keysym in ["s", "S"]:
             # S键保存当前ROI
             self.save_current_roi()
