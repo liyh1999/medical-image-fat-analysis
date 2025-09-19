@@ -1338,21 +1338,35 @@ class BaseGUI:
         if not hasattr(self, 'batch_labels_dir') or not self.batch_labels_dir:
             return None
         
-        # 尝试直接匹配
-        base_name = os.path.splitext(image_file)[0]
         # 根据文件类型选择扩展名
         if image_file.lower().endswith(('.nii', '.nii.gz')):
             label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.nii', '.nii.gz']
         else:
             label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp']
         
+        # 1. 尝试完全匹配
+        base_name = os.path.splitext(image_file)[0]
         for ext in label_extensions:
             label_file = f"{base_name}_roi{ext}"
             label_path = os.path.join(self.batch_labels_dir, label_file)
             if os.path.exists(label_path):
                 return label_path
         
-        # 尝试模糊匹配
+        # 2. 尝试去掉数字后缀匹配（如 _0000, _0001 等）
+        import re
+        # 匹配文件名末尾的数字后缀
+        pattern = r'(_\d+)$'
+        match = re.search(pattern, base_name)
+        if match:
+            # 去掉数字后缀
+            clean_base_name = base_name[:match.start()]
+            for ext in label_extensions:
+                label_file = f"{clean_base_name}_roi{ext}"
+                label_path = os.path.join(self.batch_labels_dir, label_file)
+                if os.path.exists(label_path):
+                    return label_path
+        
+        # 3. 尝试模糊匹配
         return self.fuzzy_match_label(image_file, label_extensions)
     
     def fuzzy_match_label(self, image_file, label_extensions):
