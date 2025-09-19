@@ -72,8 +72,7 @@ class Batch2DGUI(BaseGUI):
         self.canvas.create_image(self.image_offset_x, self.image_offset_y, 
                                anchor=tk.NW, image=self.image_tk)
         
-        # 绘制ROI
-        self.draw_rois_on_image()
+        # 批量处理模式不需要绘制ROI，重置状态
         self.batch_current_index = 0
         self.batch_results = []
         self.batch_processing = False

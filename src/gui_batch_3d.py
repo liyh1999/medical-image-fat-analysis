@@ -72,8 +72,7 @@ class Batch3DGUI(BaseGUI):
             self.canvas.create_image(self.image_offset_x, self.image_offset_y, 
                                    anchor=tk.NW, image=self.image_tk)
             
-            # 绘制ROI
-            self.draw_rois_on_image()
+            # 批量处理模式不需要绘制ROI
             
         except Exception as e:
             logger.error(f"显示批量处理3D切片失败: {str(e)}")
