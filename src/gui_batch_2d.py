@@ -29,7 +29,7 @@ class Batch2DGUI(BaseGUI):
         self.status_var = tk.StringVar(value="批量处理2D模式：请选择图像文件夹")
     
     def display_image(self):
-        """显示批量处理图像（基础版本）"""
+        """显示批量处理图像"""
         if self.ff_image is None:
             return
         
@@ -39,24 +39,27 @@ class Batch2DGUI(BaseGUI):
         else:
             rotated_image = self.ff_image.copy()
         
+        # 绘制ROI到图像上
+        display_image = self.draw_rois_on_image(rotated_image.copy())
+        
         # 转换为PIL图像
-        if len(rotated_image.shape) == 3:
-            pil_image = Image.fromarray(cv2.cvtColor(rotated_image, cv2.COLOR_BGR2RGB))
+        if len(display_image.shape) == 3:
+            pil_image = Image.fromarray(cv2.cvtColor(display_image, cv2.COLOR_BGR2RGB))
         else:
-            pil_image = Image.fromarray(rotated_image)
+            pil_image = Image.fromarray(display_image)
         
         # 计算缩放比例
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         
         if canvas_width > 1 and canvas_height > 1:
-            scale_x = canvas_width / rotated_image.shape[1]
-            scale_y = canvas_height / rotated_image.shape[0]
+            scale_x = canvas_width / display_image.shape[1]
+            scale_y = canvas_height / display_image.shape[0]
             self.scale_factor = min(scale_x, scale_y, 1.0)
             
             # 计算图像在画布中的位置
-            new_width = int(rotated_image.shape[1] * self.scale_factor)
-            new_height = int(rotated_image.shape[0] * self.scale_factor)
+            new_width = int(display_image.shape[1] * self.scale_factor)
+            new_height = int(display_image.shape[0] * self.scale_factor)
             
             self.image_offset_x = (canvas_width - new_width) // 2
             self.image_offset_y = (canvas_height - new_height) // 2
@@ -72,10 +75,11 @@ class Batch2DGUI(BaseGUI):
         self.canvas.create_image(self.image_offset_x, self.image_offset_y, 
                                anchor=tk.NW, image=self.image_tk)
         
-        # 批量处理模式不需要绘制ROI，重置状态
-        self.batch_current_index = 0
-        self.batch_results = []
-        self.batch_processing = False
+        # 更新状态显示
+        if self.batch_image_files:
+            self.batch_index_var.set(f"{self.batch_current_index + 1}/{len(self.batch_image_files)}")
+            current_file = self.batch_image_files[self.batch_current_index]
+            self.status_var.set(f"当前图像: {os.path.basename(current_file)} | ROI数量: {len(self.roi_list)}")
         
     def create_toolbar(self, parent):
         """创建批量处理模式工具栏"""
@@ -191,12 +195,8 @@ class Batch2DGUI(BaseGUI):
         
         # 检查是否有标签文件夹
         if not self.batch_labels_dir:
-            result = messagebox.askyesno("确认", 
-                "未选择标签文件夹，将跳过没有标签的图像。\n\n"
-                "是否继续处理？\n"
-                "点击'是'继续处理，点击'否'返回选择标签文件夹。")
-            if not result:
-                return
+            messagebox.showwarning("警告", "请先选择标签文件夹")
+            return
         
         self.batch_processing = True
         self.process_button.config(text="停止处理")
@@ -211,12 +211,67 @@ class Batch2DGUI(BaseGUI):
     def process_batch_images(self):
         """处理批量图像"""
         try:
-            # 使用analyzer模块的批量处理功能
-            self.batch_results = batch_analyze_ff_images(
-                self.batch_images_dir, 
-                self.batch_labels_dir, 
-                self.output_directory
-            )
+            self.batch_results = []
+            processed_count = 0
+            
+            for i, image_file in enumerate(self.batch_image_files):
+                if not self.batch_processing:  # 检查是否被停止
+                    break
+                
+                # 更新状态
+                self.root.after(0, lambda i=i: self.status_var.set(f"正在处理 {i+1}/{len(self.batch_image_files)}: {image_file}"))
+                
+                # 加载图像
+                image_path = os.path.join(self.batch_images_dir, image_file)
+                ff_image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+                if ff_image is None:
+                    logger.warning(f"无法加载图像: {image_path}")
+                    continue
+                
+                # 查找对应的标签文件
+                label_path = self.find_corresponding_label(image_file)
+                if not label_path:
+                    logger.warning(f"未找到标签文件: {image_file}")
+                    continue
+                
+                # 加载标签并转换为ROI
+                roi_mask = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
+                if roi_mask is None:
+                    logger.warning(f"无法加载标签文件: {label_path}")
+                    continue
+                
+                # 将掩码转换为ROI列表
+                roi_list = self.convert_mask_to_roi_list(roi_mask)
+                if not roi_list:
+                    logger.warning(f"标签文件中没有ROI: {label_path}")
+                    continue
+                
+                # 计算每个ROI的脂肪分数
+                image_results = []
+                for j, roi in enumerate(roi_list):
+                    try:
+                        # 计算脂肪分数
+                        fat_fraction = self.calculate_roi_fat_fraction(ff_image, roi)
+                        roi['fat_fraction'] = fat_fraction
+                        image_results.append(roi)
+                        logger.info(f"ROI {j+1} 脂肪分数: {fat_fraction:.3f}")
+                    except Exception as e:
+                        logger.error(f"计算ROI {j+1} 脂肪分数失败: {str(e)}")
+                
+                if image_results:
+                    result = {
+                        'image_file': image_file,
+                        'image_path': image_path,
+                        'label_path': label_path,
+                        'roi_count': len(image_results),
+                        'roi_data': image_results,
+                        'mean_fat_fraction': np.mean([roi['fat_fraction'] for roi in image_results])
+                    }
+                    self.batch_results.append(result)
+                    processed_count += 1
+                
+                # 更新进度
+                self.root.after(0, lambda i=i: self.batch_index_var.set(f"{i+1}/{len(self.batch_image_files)}"))
             
             # 更新UI
             self.root.after(0, self.batch_processing_completed)
@@ -224,6 +279,54 @@ class Batch2DGUI(BaseGUI):
         except Exception as e:
             logger.error(f"批量处理失败: {str(e)}")
             self.root.after(0, lambda: self.batch_processing_error(str(e)))
+    
+    def calculate_roi_fat_fraction(self, ff_image, roi):
+        """计算ROI的脂肪分数"""
+        try:
+            # 根据ROI类型提取像素值
+            if roi['type'] == 'rectangle':
+                x1, y1 = int(roi['start'][0]), int(roi['start'][1])
+                x2, y2 = int(roi['end'][0]), int(roi['end'][1])
+                roi_pixels = ff_image[y1:y2, x1:x2]
+            elif roi['type'] == 'circle':
+                center = (int(roi['center'][0]), int(roi['center'][1]))
+                radius = int(roi['radius'])
+                # 创建圆形掩码
+                mask = np.zeros(ff_image.shape, dtype=np.uint8)
+                cv2.circle(mask, center, radius, 1, -1)
+                roi_pixels = ff_image[mask == 1]
+            elif roi['type'] == 'polygon':
+                # 创建多边形掩码
+                mask = np.zeros(ff_image.shape, dtype=np.uint8)
+                points = np.array(roi['points'], dtype=np.int32)
+                cv2.fillPoly(mask, [points], 1)
+                roi_pixels = ff_image[mask == 1]
+            else:
+                return 0.0
+            
+            if len(roi_pixels) == 0:
+                return 0.0
+            
+            # 计算脂肪分数
+            pixel_values = roi_pixels.flatten()
+            pixel_values = pixel_values[pixel_values > 0]  # 排除背景
+            
+            if len(pixel_values) == 0:
+                return 0.0
+            
+            # 归一化到0-1范围
+            if pixel_values.max() > 100:
+                pixel_values = pixel_values / 255.0
+            else:
+                pixel_values = pixel_values / 100.0
+            
+            # 计算平均脂肪分数
+            fat_fraction = np.mean(pixel_values)
+            return float(fat_fraction)
+            
+        except Exception as e:
+            logger.error(f"计算脂肪分数失败: {str(e)}")
+            return 0.0
     
     def batch_processing_completed(self):
         """批量处理完成"""
@@ -282,11 +385,14 @@ class Batch2DGUI(BaseGUI):
                 if self.roi_mask is not None:
                     # 将掩码转换为ROI列表
                     self.convert_mask_to_roi_list(self.roi_mask)
+                    logger.info(f"从标签文件加载了 {len(self.roi_list)} 个ROI: {os.path.basename(label_path)}")
                 else:
                     self.roi_list = []
+                    logger.warning(f"无法加载标签文件: {label_path}")
             else:
                 self.roi_list = []
                 self.roi_mask = None
+                logger.info(f"未找到对应的标签文件: {image_file}")
             
             # 重置旋转角度
             self.rotation_angle = 0
@@ -340,27 +446,63 @@ class Batch2DGUI(BaseGUI):
             return
         
         try:
+            # 保存每幅图的JSON文件
+            for result in self.batch_results:
+                base_name = os.path.splitext(result['image_file'])[0]
+                json_path = os.path.join(self.output_directory, f"{base_name}_roi_data.json")
+                
+                # 准备JSON数据
+                roi_data = []
+                for roi in result['roi_data']:
+                    roi_data.append({
+                        'type': roi['type'],
+                        'fat_fraction': roi['fat_fraction'],
+                        'start': roi.get('start', []),
+                        'end': roi.get('end', []),
+                        'center': roi.get('center', []),
+                        'radius': roi.get('radius', 0),
+                        'points': roi.get('points', [])
+                    })
+                
+                json_data = {
+                    'image_file': result['image_file'],
+                    'roi_count': result['roi_count'],
+                    'roi_data': roi_data,
+                    'mean_fat_fraction': result['mean_fat_fraction']
+                }
+                
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(json_data, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"已保存JSON文件: {json_path}")
+            
             # 创建汇总表格
             import pandas as pd
             
             summary_data = []
             for result in self.batch_results:
-                summary_data.append({
-                    '图像文件': result.get('image_file', 'unknown'),
-                    '平均脂肪分数': result.get('mean_fat_fraction', 0),
-                    '标准差': result.get('std_fat_fraction', 0),
-                    '中位数': result.get('median_fat_fraction', 0),
-                    '像素数量': result.get('pixel_count', 0),
-                    'ROI面积': result.get('roi_area', 0),
-                    '覆盖率(%)': result.get('roi_coverage_percent', 0)
-                })
+                for i, roi in enumerate(result['roi_data']):
+                    summary_data.append({
+                        '图像文件': result['image_file'],
+                        'ROI编号': i + 1,
+                        'ROI类型': roi['type'],
+                        '脂肪分数': roi['fat_fraction'],
+                        '平均脂肪分数': result['mean_fat_fraction'],
+                        'ROI总数': result['roi_count']
+                    })
             
             df = pd.DataFrame(summary_data)
-            csv_path = os.path.join(self.output_directory, "batch_results_summary.csv")
-            df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+            excel_path = os.path.join(self.output_directory, "batch_analysis_results.xlsx")
+            try:
+                df.to_excel(excel_path, index=False, engine='openpyxl')
+                logger.info(f"已保存Excel文件: {excel_path}")
+            except:
+                # 如果Excel保存失败，保存CSV
+                csv_path = os.path.join(self.output_directory, "batch_analysis_results.csv")
+                df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+                logger.info(f"已保存CSV文件: {csv_path}")
             
-            # 保存JSON结果
-            import json
+            # 保存总的JSON结果
             json_path = os.path.join(self.output_directory, "batch_results.json")
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(self.batch_results, f, indent=2, ensure_ascii=False)
