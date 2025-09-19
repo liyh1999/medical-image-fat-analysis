@@ -25,6 +25,7 @@ class Interactive3DGUI(BaseGUI):
         self.current_slice = 0  # 当前切片索引
         self.is_3d_mode = False  # 是否为3D模式
         self.image_roi_dict = {}  # 存储每张图像的ROI数据
+        self.slice_roi_dict = {}  # 存储每个切片的ROI数据 {view_slice_key: roi_list}
         
         # 交互式模式相关（用于兼容性）
         self.interactive_image_files = []
@@ -48,6 +49,14 @@ class Interactive3DGUI(BaseGUI):
         self.scale_factor = 1.0
         self.image_offset_x = 0
         self.image_offset_y = 0
+    
+    def get_slice_key(self, view=None, slice_idx=None):
+        """获取切片键"""
+        if view is None:
+            view = self.current_view
+        if slice_idx is None:
+            slice_idx = self.current_slice
+        return f"{view}_{slice_idx}"
     
     def on_roi_type_change(self, event):
         """ROI类型改变事件"""
@@ -91,7 +100,13 @@ class Interactive3DGUI(BaseGUI):
             messagebox.showwarning("警告", "请先绘制ROI区域")
             return
         
-        # 添加到ROI列表
+        # 添加到当前切片的ROI列表
+        slice_key = self.get_slice_key()
+        if slice_key not in self.slice_roi_dict:
+            self.slice_roi_dict[slice_key] = []
+        self.slice_roi_dict[slice_key].append(roi)
+        
+        # 同时更新全局ROI列表（用于显示）
         self.roi_list.append(roi)
         
         # 计算脂肪分数
@@ -120,7 +135,13 @@ class Interactive3DGUI(BaseGUI):
             'points': self.polygon_points.copy()
         }
         
-        # 添加到ROI列表
+        # 添加到当前切片的ROI列表
+        slice_key = self.get_slice_key()
+        if slice_key not in self.slice_roi_dict:
+            self.slice_roi_dict[slice_key] = []
+        self.slice_roi_dict[slice_key].append(roi)
+        
+        # 同时更新全局ROI列表（用于显示）
         self.roi_list.append(roi)
         
         # 计算脂肪分数
@@ -560,6 +581,15 @@ class Interactive3DGUI(BaseGUI):
             view_info = self.current_3d_viewer.get_view_info(self.current_view)
             if view_info:
                 self.slice_var.set(f"{self.current_slice + 1}/{view_info['max_slices']}")
+            
+            # 加载当前切片的ROI数据
+            slice_key = self.get_slice_key()
+            if slice_key in self.slice_roi_dict:
+                self.roi_list = self.slice_roi_dict[slice_key].copy()
+                logger.info(f"加载切片 {slice_key} 的ROI数据: {len(self.roi_list)} 个ROI")
+            else:
+                self.roi_list = []
+                logger.info(f"切片 {slice_key} 没有ROI数据")
             
             # 显示图像
             self.display_image()
