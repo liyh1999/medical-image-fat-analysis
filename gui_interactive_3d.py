@@ -188,8 +188,11 @@ class Interactive3DGUI(BaseGUI):
             dy = point[1] - self.center_point[1]
             self.radius = int(np.sqrt(dx*dx + dy*dy))
         
-        # 自动保存ROI
-        self.save_current_roi()
+        # 保持绘制状态，显示红色ROI，等待S键保存
+        # self.drawing 保持 True，直到用户按S键保存
+        
+        # 更新显示，显示红色ROI
+        self.display_image()
     
     def on_roi_type_change(self, event):
         """ROI类型改变事件"""
@@ -597,8 +600,11 @@ class Interactive3DGUI(BaseGUI):
             self.next_slice()
         elif event.keysym in ["Up", "w", "W"]:
             self.prev_slice()
-        elif event.keysym in ["Down", "s", "S"]:
+        elif event.keysym in ["Down", "x", "X"]:
             self.next_slice()
+        elif event.keysym in ["s", "S"]:
+            # S键保存当前ROI
+            self.save_current_roi()
         elif event.keysym == "v":
             # 切换视图
             views = ["axial", "sagittal", "coronal"]
