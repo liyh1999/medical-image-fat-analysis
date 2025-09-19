@@ -1316,7 +1316,7 @@ class BaseGUI:
         # 查找轮廓
         contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        self.roi_list = []
+        roi_list = []
         for i, contour in enumerate(contours):
             # 计算轮廓面积
             area = cv2.contourArea(contour)
@@ -1329,9 +1329,10 @@ class BaseGUI:
                 'points': contour.reshape(-1, 2).tolist(),
                 'fat_fraction': None
             }
-            self.roi_list.append(roi)
+            roi_list.append(roi)
         
-        logger.info(f"从掩码转换得到 {len(self.roi_list)} 个ROI")
+        logger.info(f"从掩码转换得到 {len(roi_list)} 个ROI")
+        return roi_list
     
     def find_corresponding_label(self, image_file):
         """查找对应的标签文件"""
@@ -1346,10 +1347,13 @@ class BaseGUI:
         
         # 1. 尝试完全匹配
         base_name = os.path.splitext(image_file)[0]
+        logger.debug(f"开始匹配标签文件，图像文件: {image_file}, 基础名称: {base_name}")
         for ext in label_extensions:
             label_file = f"{base_name}_roi{ext}"
             label_path = os.path.join(self.batch_labels_dir, label_file)
+            logger.debug(f"尝试完全匹配: {label_file} -> {label_path} (存在: {os.path.exists(label_path)})")
             if os.path.exists(label_path):
+                logger.debug(f"完全匹配成功: {label_path}")
                 return label_path
         
         # 2. 尝试去掉数字后缀匹配（如 _0000, _0001 等）
@@ -1360,20 +1364,27 @@ class BaseGUI:
         if match:
             # 去掉数字后缀
             clean_base_name = base_name[:match.start()]
+            logger.debug(f"检测到数字后缀，清理后的名称: {clean_base_name}")
             
             # 2a. 尝试带_roi后缀的匹配
             for ext in label_extensions:
                 label_file = f"{clean_base_name}_roi{ext}"
                 label_path = os.path.join(self.batch_labels_dir, label_file)
+                logger.debug(f"尝试带_roi后缀匹配: {label_file} -> {label_path} (存在: {os.path.exists(label_path)})")
                 if os.path.exists(label_path):
+                    logger.debug(f"带_roi后缀匹配成功: {label_path}")
                     return label_path
             
             # 2b. 尝试直接匹配（不带_roi后缀）
             for ext in label_extensions:
                 label_file = f"{clean_base_name}{ext}"
                 label_path = os.path.join(self.batch_labels_dir, label_file)
+                logger.debug(f"尝试直接匹配: {label_file} -> {label_path} (存在: {os.path.exists(label_path)})")
                 if os.path.exists(label_path):
+                    logger.debug(f"直接匹配成功: {label_path}")
                     return label_path
+        else:
+            logger.debug(f"未检测到数字后缀，跳过第二级匹配")
         
         # 3. 尝试模糊匹配
         return self.fuzzy_match_label(image_file, label_extensions)

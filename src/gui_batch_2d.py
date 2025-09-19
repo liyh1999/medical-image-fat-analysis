@@ -369,6 +369,11 @@ class Batch2DGUI(BaseGUI):
         if not self.batch_image_files or index >= len(self.batch_image_files):
             return
         
+        # 检查是否有标签文件夹
+        if not self.batch_labels_dir:
+            messagebox.showwarning("警告", "请先选择标签文件夹才能查看图像和标签")
+            return
+        
         try:
             # 加载图像
             image_file = self.batch_image_files[index]
@@ -379,12 +384,15 @@ class Batch2DGUI(BaseGUI):
                 raise ValueError(f"无法加载图像: {image_path}")
             
             # 查找对应的标签文件
+            logger.debug(f"开始查找标签文件: {image_file}")
+            logger.debug(f"batch_labels_dir: {getattr(self, 'batch_labels_dir', 'NOT SET')}")
             label_path = self.find_corresponding_label(image_file)
+            logger.debug(f"find_corresponding_label返回: {label_path}")
             if label_path:
                 self.roi_mask = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
                 if self.roi_mask is not None:
                     # 将掩码转换为ROI列表
-                    self.convert_mask_to_roi_list(self.roi_mask)
+                    self.roi_list = self.convert_mask_to_roi_list(self.roi_mask)
                     logger.info(f"从标签文件加载了 {len(self.roi_list)} 个ROI: {os.path.basename(label_path)}")
                 else:
                     self.roi_list = []
