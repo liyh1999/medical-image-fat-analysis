@@ -340,6 +340,9 @@ class Interactive3DGUI(BaseGUI):
             else:
                 display_image = slice_data.copy()
             
+            # 应用旋转
+            if self.rotation_angle != 0:
+                display_image = self.apply_rotation(display_image, self.rotation_angle)
             
             # 绘制ROI到图像上
             self.draw_rois_on_image(display_image)
@@ -868,3 +871,10 @@ class Interactive3DGUI(BaseGUI):
             json.dump(json_data, f, indent=2, ensure_ascii=False)
         
         logger.info(f"已保存3D ROI数据: {json_path}")
+    
+    def rotate_image_90(self):
+        """旋转图像90度"""
+        if self.ff_image is not None:
+            self.rotation_angle = (self.rotation_angle + 90) % 360
+            self.display_image()
+            self.status_var.set(f"图像已旋转 {self.rotation_angle}°")

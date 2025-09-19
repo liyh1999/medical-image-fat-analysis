@@ -794,6 +794,14 @@ class BaseGUI:
             if roi['type'] == 'rectangle':
                 x1, y1 = int(start[0]), int(start[1])
                 x2, y2 = int(end[0]), int(end[1])
+                
+                # 确保坐标在图像范围内
+                h, w = image.shape[:2]
+                x1 = max(0, min(x1, w-1))
+                y1 = max(0, min(y1, h-1))
+                x2 = max(0, min(x2, w-1))
+                y2 = max(0, min(y2, h-1))
+                
                 cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
                 
                 # 添加标签
@@ -805,6 +813,13 @@ class BaseGUI:
                 cx = int(center[0])
                 cy = int(center[1])
                 r = int(radius)
+                
+                # 确保坐标在图像范围内
+                h, w = image.shape[:2]
+                cx = max(0, min(cx, w-1))
+                cy = max(0, min(cy, h-1))
+                r = max(1, min(r, min(w, h)//2))
+                
                 cv2.circle(image, (cx, cy), r, color, thickness)
                 
                 # 添加标签
@@ -814,7 +829,16 @@ class BaseGUI:
                 
             elif roi['type'] == 'polygon':
                 # 绘制多边形
-                points = np.array([(int(p[0]), int(p[1])) for p in points], dtype=np.int32)
+                h, w = image.shape[:2]
+                # 确保所有点都在图像范围内
+                valid_points = []
+                for p in points:
+                    x, y = int(p[0]), int(p[1])
+                    x = max(0, min(x, w-1))
+                    y = max(0, min(y, h-1))
+                    valid_points.append((x, y))
+                
+                points = np.array(valid_points, dtype=np.int32)
                 cv2.polylines(image, [points], True, color, thickness)
                 
                 # 计算文本位置（使用多边形的中心点）
@@ -940,10 +964,9 @@ class BaseGUI:
         if rotation_angle == 0:
             return points
         
-        # 获取图像中心
+        # 获取原始图像尺寸
         if self.ff_image is not None:
             h, w = self.ff_image.shape[:2]
-            center_x, center_y = w // 2, h // 2
         else:
             return points
         
@@ -951,26 +974,23 @@ class BaseGUI:
         for point in points:
             x, y = point
             
-            # 平移到原点
-            x -= center_x
-            y -= center_y
-            
-            # 旋转
+            # 根据旋转角度调整坐标
             if rotation_angle == 90:
-                new_x = -y
+                # 顺时针90度：(x,y) -> (h-1-y, x)
+                # 旋转后图像尺寸变为 (w, h)
+                new_x = h - 1 - y
                 new_y = x
             elif rotation_angle == 180:
-                new_x = -x
-                new_y = -y
+                # 180度：(x,y) -> (w-1-x, h-1-y)
+                new_x = w - 1 - x
+                new_y = h - 1 - y
             elif rotation_angle == 270:
+                # 顺时针270度：(x,y) -> (y, w-1-x)
+                # 旋转后图像尺寸变为 (w, h)
                 new_x = y
-                new_y = -x
+                new_y = w - 1 - x
             else:
                 new_x, new_y = x, y
-            
-            # 平移回原位置
-            new_x += center_x
-            new_y += center_y
             
             rotated_points.append((new_x, new_y))
         
