@@ -576,6 +576,14 @@ class Interactive3DGUI(BaseGUI):
                 self.status_var.set(f"显示切片失败: {str(e)}")
         self.interactive_images_dir = None
         
+    def create_toolbar(self, parent):
+        """创建交互式3D模式工具栏"""
+        # 调用父类方法创建工具栏框架
+        super().create_toolbar(parent)
+        
+        # 创建交互式3D模式工具栏
+        self.create_interactive_toolbar()
+    
     def create_interactive_toolbar(self):
         """创建交互式3D模式工具栏"""
         # 3D视图控制

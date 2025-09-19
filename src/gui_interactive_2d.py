@@ -27,6 +27,14 @@ class Interactive2DGUI(BaseGUI):
         # 状态变量
         self.status_var = tk.StringVar(value="交互式2D模式：请选择图像")
         
+    def create_toolbar(self, parent):
+        """创建交互式2D模式工具栏"""
+        # 调用父类方法创建工具栏框架
+        super().create_toolbar(parent)
+        
+        # 创建交互式2D模式工具栏
+        self.create_interactive_toolbar()
+    
     def create_interactive_toolbar(self):
         """创建交互式模式工具栏"""
         # ROI类型选择
