@@ -504,6 +504,34 @@ class Interactive3DGUI(BaseGUI):
             # 绘制ROI到图像上
             self.draw_rois_on_image(display_image)
             
+            # 绘制当前正在绘制的ROI（红色提示框）
+            if self.drawing:
+                if self.current_roi_type == 'rectangle' and self.start_point and self.end_point:
+                    # 根据旋转角度调整坐标
+                    if self.rotation_angle != 0:
+                        start = self.rotate_roi_coordinates_for_display([self.start_point], self.rotation_angle)[0]
+                        end = self.rotate_roi_coordinates_for_display([self.end_point], self.rotation_angle)[0]
+                    else:
+                        start = self.start_point
+                        end = self.end_point
+                    
+                    x1 = int(start[0])
+                    y1 = int(start[1])
+                    x2 = int(end[0])
+                    y2 = int(end[1])
+                    cv2.rectangle(display_image, (x1, y1), (x2, y2), (0, 0, 255), 2)  # 红色
+                elif self.current_roi_type == 'circle' and self.center_point and self.radius > 0:
+                    # 根据旋转角度调整坐标
+                    if self.rotation_angle != 0:
+                        center = self.rotate_roi_coordinates_for_display([self.center_point], self.rotation_angle)[0]
+                    else:
+                        center = self.center_point
+                    
+                    cx = int(center[0])
+                    cy = int(center[1])
+                    r = int(self.radius)
+                    cv2.circle(display_image, (cx, cy), r, (0, 0, 255), 2)  # 红色
+            
             # 绘制临时多边形（如果正在绘制）
             if self.current_roi_type == 'polygon' and len(self.polygon_points) > 0:
                 self.draw_temp_polygon(display_image)
