@@ -807,7 +807,10 @@ class BaseGUI:
                 # 添加标签
                 text_x = min(x1, x2)
                 text_y = min(y1, y2) - 5
-                cv2.putText(image, f'ROI{i+1}', (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                label_text = f'ROI{i+1}'
+                if roi.get('fat_fraction') is not None:
+                    label_text += f' FF:{roi["fat_fraction"]:.3f}'
+                cv2.putText(image, label_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 
             elif roi['type'] == 'circle':
                 cx = int(center[0])
@@ -825,7 +828,10 @@ class BaseGUI:
                 # 添加标签
                 text_x = cx - 20
                 text_y = cy - r - 5
-                cv2.putText(image, f'ROI{i+1}', (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                label_text = f'ROI{i+1}'
+                if roi.get('fat_fraction') is not None:
+                    label_text += f' FF:{roi["fat_fraction"]:.3f}'
+                cv2.putText(image, label_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 
             elif roi['type'] == 'polygon':
                 # 绘制多边形
@@ -846,7 +852,10 @@ class BaseGUI:
                 center_y = int(np.mean([p[1] for p in points]))
                 text_x = max(5, center_x - 30)
                 text_y = max(25, center_y - 5)
-                cv2.putText(image, f'ROI{i+1}', (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                label_text = f'ROI{i+1}'
+                if roi.get('fat_fraction') is not None:
+                    label_text += f' FF:{roi["fat_fraction"]:.3f}'
+                cv2.putText(image, label_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         
         return image
     

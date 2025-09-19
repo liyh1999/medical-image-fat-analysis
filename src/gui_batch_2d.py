@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import tkinter as tk
 import logging
+import json
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 from utils import logger, natural_sort_key
@@ -393,6 +394,12 @@ class Batch2DGUI(BaseGUI):
                 if self.roi_mask is not None:
                     # 将掩码转换为ROI列表
                     self.roi_list = self.convert_mask_to_roi_list(self.roi_mask)
+                    
+                    # 计算每个ROI的脂肪分数
+                    for roi in self.roi_list:
+                        fat_fraction = self.calculate_roi_fat_fraction(self.ff_image, roi)
+                        roi['fat_fraction'] = fat_fraction
+                    
                     logger.info(f"从标签文件加载了 {len(self.roi_list)} 个ROI: {os.path.basename(label_path)}")
                 else:
                     self.roi_list = []
