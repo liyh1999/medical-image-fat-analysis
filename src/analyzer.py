@@ -629,6 +629,51 @@ def analyze_ff_image(ff_image_path, roi_mask_path=None, output_dir=None):
         logger.error(f"分析FF图像失败: {str(e)}")
         raise
 
+def find_corresponding_roi_mask(image_file, roi_masks_dir):
+    """查找对应的ROI掩码文件（与基类逻辑一致）"""
+    if not roi_masks_dir or not os.path.exists(roi_masks_dir):
+        return None
+    
+    # 尝试直接匹配
+    base_name = os.path.splitext(image_file)[0]
+    # 根据文件类型选择扩展名
+    if image_file.lower().endswith(('.nii', '.nii.gz')):
+        label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.nii', '.nii.gz']
+    else:
+        label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp']
+    
+    for ext in label_extensions:
+        label_file = f"{base_name}_roi{ext}"
+        label_path = os.path.join(roi_masks_dir, label_file)
+        if os.path.exists(label_path):
+            return label_path
+    
+    # 尝试模糊匹配
+    return fuzzy_match_roi_mask(image_file, roi_masks_dir, label_extensions)
+
+def fuzzy_match_roi_mask(image_file, roi_masks_dir, label_extensions):
+    """模糊匹配ROI掩码文件（与基类逻辑一致）"""
+    if not roi_masks_dir or not os.path.exists(roi_masks_dir):
+        return None
+    
+    base_name = os.path.splitext(image_file)[0]
+    
+    # 获取所有标签文件
+    label_files = []
+    for file in os.listdir(roi_masks_dir):
+        if any(file.lower().endswith(ext) for ext in label_extensions):
+            label_files.append(file)
+    
+    # 尝试模糊匹配
+    for label_file in label_files:
+        label_base = os.path.splitext(label_file)[0]
+        
+        # 检查是否包含图像文件名
+        if base_name in label_base or label_base in base_name:
+            return os.path.join(roi_masks_dir, label_file)
+    
+    return None
+
 def batch_analyze_ff_images(ff_images_dir, roi_masks_dir=None, output_dir=None):
     """
     批量分析FF图像
@@ -658,17 +703,18 @@ def batch_analyze_ff_images(ff_images_dir, roi_masks_dir=None, output_dir=None):
         ff_path = os.path.join(ff_images_dir, ff_file)
         
         # 查找对应的ROI掩码
-        roi_path = None
-        if roi_masks_dir and os.path.exists(roi_masks_dir):
-            roi_file = ff_file.replace('.png', '_roi.png').replace('.jpg', '_roi.png')
-            roi_path = os.path.join(roi_masks_dir, roi_file)
-            if not os.path.exists(roi_path):
-                roi_path = None
+        roi_path = find_corresponding_roi_mask(ff_file, roi_masks_dir)
         
         # 如果没有ROI掩码，跳过此图像
         if roi_path is None:
             print(f"跳过 {ff_file}：未找到对应的ROI掩码")
+            # 调试信息：显示标签文件夹中的文件
+            if roi_masks_dir and os.path.exists(roi_masks_dir):
+                label_files = [f for f in os.listdir(roi_masks_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp'))]
+                print(f"  标签文件夹中有 {len(label_files)} 个文件，前5个: {label_files[:5]}")
             continue
+        else:
+            print(f"找到匹配的ROI掩码: {os.path.basename(roi_path)}")
         
         # 分析单个图像
         result = analyze_ff_image(ff_path, roi_path, output_dir)
