@@ -291,33 +291,60 @@ class Interactive2DGUI(BaseGUI):
         self.draw_rois_on_canvas()
     
     def save_current_image_with_roi(self):
-        """保存当前图像和ROI"""
-        if self.ff_image is None:
-            messagebox.showwarning("警告", "没有图像可保存")
-            return
-        
+        """保存2D图像ROI数据（智能批量保存）"""
         if not self.output_directory:
             messagebox.showwarning("警告", "请先设置输出目录")
+            return
+        
+        # 检查是否有任何ROI数据
+        has_roi_data = False
+        for image_file, roi_list in self.image_roi_dict.items():
+            if roi_list:
+                has_roi_data = True
+                break
+        
+        # 也检查当前图像的ROI数据
+        if self.interactive_image_files and self.roi_list:
+            current_file = self.interactive_image_files[self.interactive_current_index]
+            self.image_roi_dict[current_file] = self.roi_list.copy()
+            has_roi_data = True
+        
+        if not has_roi_data:
+            messagebox.showwarning("警告", "没有ROI数据可保存")
             return
         
         try:
             # 创建输出目录
             os.makedirs(self.output_directory, exist_ok=True)
             
-            # 生成文件名
-            if self.interactive_image_files:
-                base_name = os.path.splitext(self.interactive_image_files[self.interactive_current_index])[0]
-            else:
-                base_name = "image"
+            saved_count = 0
             
-            # 保存带ROI的图像
-            self.save_2d_image_with_roi(base_name)
+            # 批量保存所有已标注的图像
+            for image_file, roi_list in self.image_roi_dict.items():
+                if not roi_list:  # 跳过没有ROI的图像
+                    continue
+                
+                # 生成文件名
+                base_name = os.path.splitext(image_file)[0]
+                
+                # 临时设置ROI列表用于保存
+                original_roi_list = self.roi_list.copy()
+                self.roi_list = roi_list.copy()
+                
+                # 保存带ROI的图像
+                self.save_2d_image_with_roi(base_name)
+                
+                # 保存ROI数据
+                self.save_2d_json_data(base_name)
+                
+                saved_count += 1
+                
+                # 恢复原始状态
+                self.roi_list = original_roi_list
             
-            # 保存ROI数据
-            self.save_2d_json_data(base_name)
-            
-            self.status_var.set(f"已保存图像和ROI数据到: {self.output_directory}")
-            messagebox.showinfo("成功", "图像和ROI数据已保存")
+            self.status_var.set(f"已批量保存 {saved_count} 张图像的ROI数据到: {self.output_directory}")
+            messagebox.showinfo("成功", f"已批量保存 {saved_count} 张图像的ROI数据")
+            logger.info(f"批量保存完成，共保存 {saved_count} 张图像")
             
         except Exception as e:
             messagebox.showerror("错误", f"保存失败: {str(e)}")
@@ -427,10 +454,20 @@ class Interactive2DGUI(BaseGUI):
         
         # 保存JSON数据
         import json
+        
+        # 确定图像文件名
+        image_file = f"{base_name}.bmp"  # 默认扩展名
+        if self.interactive_image_files:
+            # 查找对应的图像文件
+            for file in self.interactive_image_files:
+                if os.path.splitext(file)[0] == base_name:
+                    image_file = file
+                    break
+        
         json_path = os.path.join(self.output_directory, f"{base_name}_roi_data.json")
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump({
-                'image_file': self.interactive_image_files[self.interactive_current_index] if self.interactive_image_files else "unknown",
+                'image_file': image_file,
                 'roi_count': len(roi_data),
                 'roi_data': roi_data,
                 'rotation_angle': self.rotation_angle

@@ -890,33 +890,71 @@ class Interactive3DGUI(BaseGUI):
         self.load_interactive_image()
     
     def save_current_image_with_roi(self):
-        """保存当前3D切片图像和ROI数据（统一保存功能）"""
-        if not self.roi_list:
-            messagebox.showwarning("警告", "没有ROI数据可保存")
-            return
-        
+        """保存3D ROI数据（智能批量保存）"""
         if not self.output_directory:
             messagebox.showwarning("警告", "请先设置输出目录")
+            return
+        
+        # 检查是否有任何ROI数据
+        has_roi_data = False
+        for slice_key, roi_list in self.slice_roi_dict.items():
+            if roi_list:
+                has_roi_data = True
+                break
+        
+        if not has_roi_data:
+            messagebox.showwarning("警告", "没有ROI数据可保存")
             return
         
         try:
             # 创建输出目录
             os.makedirs(self.output_directory, exist_ok=True)
             
-            # 生成文件名
+            # 生成基础文件名
             if self.interactive_image_files:
                 base_name = os.path.splitext(self.interactive_image_files[self.interactive_current_index])[0]
             else:
-                base_name = f"3d_data_{self.current_view}_{self.current_slice}"
+                base_name = f"3d_data_{self.current_view}"
             
-            # 保存3D切片图像
-            self.save_3d_slice_image(base_name)
+            saved_count = 0
             
-            # 保存3D JSON数据
-            self.save_3d_json_data(base_name)
+            # 批量保存所有已标注的切片
+            for slice_key, roi_list in self.slice_roi_dict.items():
+                if not roi_list:  # 跳过没有ROI的切片
+                    continue
+                
+                # 解析切片键
+                view, slice_idx = slice_key.split('_', 1)
+                slice_idx = int(slice_idx)
+                
+                # 临时设置当前切片和ROI列表用于保存
+                original_slice = self.current_slice
+                original_view = self.current_view
+                original_roi_list = self.roi_list.copy()
+                
+                self.current_slice = slice_idx
+                self.current_view = view
+                self.roi_list = roi_list.copy()
+                
+                # 生成切片文件名
+                slice_base_name = f"{base_name}_{view}_{slice_idx:03d}"
+                
+                # 保存切片图像
+                self.save_3d_slice_image(slice_base_name)
+                
+                # 保存切片JSON数据
+                self.save_3d_json_data(slice_base_name)
+                
+                saved_count += 1
+                
+                # 恢复原始状态
+                self.current_slice = original_slice
+                self.current_view = original_view
+                self.roi_list = original_roi_list
             
-            self.status_var.set(f"已保存3D切片和ROI数据到: {self.output_directory}")
-            messagebox.showinfo("成功", "3D切片图像和ROI数据已保存")
+            self.status_var.set(f"已批量保存 {saved_count} 个切片的ROI数据到: {self.output_directory}")
+            messagebox.showinfo("成功", f"已批量保存 {saved_count} 个切片的ROI数据")
+            logger.info(f"批量保存完成，共保存 {saved_count} 个切片")
             
         except Exception as e:
             messagebox.showerror("错误", f"保存失败: {str(e)}")
