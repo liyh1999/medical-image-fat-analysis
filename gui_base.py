@@ -206,28 +206,6 @@ class BaseGUI:
             self.output_text.insert(tk.END, "".join(output_lines))
         
     
-    def create_interactive_toolbar(self):
-        """创建交互式模式工具栏（基础版本）"""
-        # 图像操作按钮
-        ttk.Button(self.toolbar, text="打开图像", command=self.open_ff_image).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(self.toolbar, text="打开ROI掩码", command=self.open_roi_mask).pack(side=tk.LEFT, padx=(0, 5))
-        
-        # 保存按钮
-        ttk.Button(self.toolbar, text="保存结果", command=self.save_results).pack(side=tk.LEFT, padx=(0, 5))
-        
-        # 调试日志开关
-        self.debug_var = tk.BooleanVar()
-        ttk.Checkbutton(self.toolbar, text="调试日志", variable=self.debug_var, 
-                       command=self.toggle_debug_logging).pack(side=tk.RIGHT)
-    
-    def create_batch_toolbar(self):
-        """创建批量处理模式工具栏（基础版本）"""
-        # 批量处理按钮
-        ttk.Button(self.toolbar, text="选择图像文件夹", command=self.open_batch_images_folder).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(self.toolbar, text="选择标签文件夹", command=self.open_batch_labels_folder).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(self.toolbar, text="开始批量处理", command=self.start_batch_processing).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(self.toolbar, text="导出结果", command=self.export_batch_results).pack(side=tk.LEFT, padx=(0, 5))
-    
     def open_ff_image(self):
         """打开FF图像（基础版本）"""
         file_path = filedialog.askopenfilename(
@@ -259,30 +237,6 @@ class BaseGUI:
                     self.status_var.set(f"已加载ROI掩码: {os.path.basename(file_path)}")
             except Exception as e:
                 messagebox.showerror("错误", f"加载ROI掩码失败: {str(e)}")
-    
-    def open_batch_images_folder(self):
-        """打开批量处理图像文件夹（基础版本）"""
-        folder_path = filedialog.askdirectory(title="选择图像文件夹")
-        if folder_path:
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set(f"已选择图像文件夹: {os.path.basename(folder_path)}")
-    
-    def open_batch_labels_folder(self):
-        """打开批量处理标签文件夹（基础版本）"""
-        folder_path = filedialog.askdirectory(title="选择标签文件夹")
-        if folder_path:
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set(f"已选择标签文件夹: {os.path.basename(folder_path)}")
-    
-    def start_batch_processing(self):
-        """开始批量处理（基础版本）"""
-        if hasattr(self, 'status_var') and self.status_var:
-            self.status_var.set("批量处理功能需要在具体模式中实现")
-    
-    def export_batch_results(self):
-        """导出批量处理结果（基础版本）"""
-        if hasattr(self, 'status_var') and self.status_var:
-            self.status_var.set("导出功能需要在具体模式中实现")
     
     def display_image(self):
         """显示图像（基础版本）"""
@@ -501,8 +455,8 @@ class BaseGUI:
                 # 统一保存功能 - 根据模式调用不同的保存方法
                 if hasattr(self, 'save_current_image_with_roi'):
                     self.save_current_image_with_roi()  # 交互式模式：保存图像+ROI文件
-                else:
-                    self.save_results()  # 其他模式：保存结果
+                elif hasattr(self, 'export_batch_results'):
+                    self.export_batch_results()  # 批量模式：导出结果
             elif event.keysym == "q":
                 self.on_closing()
             elif event.keysym == "r":
@@ -1318,25 +1272,6 @@ class BaseGUI:
         else:
             self.status_var.set("计算完成")
     
-    def save_results(self):
-        """保存结果"""
-        if not self.results:
-            messagebox.showwarning("警告", "没有结果可保存")
-            return
-        
-        # 选择保存路径
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        
-        if file_path:
-            try:
-                # 这里可以添加保存逻辑
-                messagebox.showinfo("成功", "结果已保存")
-            except Exception as e:
-                messagebox.showerror("错误", f"保存失败: {str(e)}")
-    
     def on_closing(self):
         """程序关闭时的清理工作"""
         logger.info("程序正在关闭，清理ROI数据...")
@@ -1346,6 +1281,87 @@ class BaseGUI:
         logger.info("ROI数据已清理完成")
         # 关闭窗口
         self.root.destroy()
+    
+    def set_output_directory(self):
+        """设置输出目录"""
+        directory = filedialog.askdirectory(title="选择输出目录")
+        if directory:
+            self.output_directory = directory
+            self.status_var.set(f"输出目录已设置为: {directory}")
+    
+    def convert_mask_to_roi_list(self, roi_mask):
+        """将掩码转换为ROI列表"""
+        # 查找轮廓
+        contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        self.roi_list = []
+        for i, contour in enumerate(contours):
+            # 计算轮廓面积
+            area = cv2.contourArea(contour)
+            if area < 100:  # 过滤面积小于100像素的区域
+                continue
+            
+            # 创建多边形ROI
+            roi = {
+                'type': 'polygon',
+                'points': contour.reshape(-1, 2).tolist(),
+                'fat_fraction': None
+            }
+            self.roi_list.append(roi)
+        
+        logger.info(f"从掩码转换得到 {len(self.roi_list)} 个ROI")
+    
+    def find_corresponding_label(self, image_file):
+        """查找对应的标签文件"""
+        if not hasattr(self, 'batch_labels_dir') or not self.batch_labels_dir:
+            return None
+        
+        # 尝试直接匹配
+        base_name = os.path.splitext(image_file)[0]
+        # 根据文件类型选择扩展名
+        if image_file.lower().endswith(('.nii', '.nii.gz')):
+            label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.nii', '.nii.gz']
+        else:
+            label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp']
+        
+        for ext in label_extensions:
+            label_file = f"{base_name}_roi{ext}"
+            label_path = os.path.join(self.batch_labels_dir, label_file)
+            if os.path.exists(label_path):
+                return label_path
+        
+        # 尝试模糊匹配
+        return self.fuzzy_match_label(image_file, label_extensions)
+    
+    def fuzzy_match_label(self, image_file, label_extensions):
+        """模糊匹配标签文件"""
+        if not hasattr(self, 'batch_labels_dir') or not self.batch_labels_dir:
+            return None
+        
+        base_name = os.path.splitext(image_file)[0]
+        
+        # 获取所有标签文件
+        label_files = []
+        for file in os.listdir(self.batch_labels_dir):
+            if any(file.lower().endswith(ext) for ext in label_extensions):
+                label_files.append(file)
+        
+        # 尝试模糊匹配
+        for label_file in label_files:
+            label_base = os.path.splitext(label_file)[0]
+            
+            # 检查是否包含图像文件名
+            if base_name in label_base or label_base in base_name:
+                return os.path.join(self.batch_labels_dir, label_file)
+        
+        return None
+    
+    def update_image_index(self):
+        """更新图像索引显示"""
+        if hasattr(self, 'interactive_image_files') and self.interactive_image_files:
+            self.image_index_var.set(f"{self.interactive_current_index + 1}/{len(self.interactive_image_files)}")
+        else:
+            self.image_index_var.set("0/0")
     
     def run(self):
         """运行应用程序"""

@@ -689,20 +689,6 @@ class Interactive3DGUI(BaseGUI):
         self.interactive_current_index = (self.interactive_current_index + 1) % len(self.interactive_image_files)
         self.load_interactive_image()
     
-    def update_image_index(self):
-        """更新图像索引显示"""
-        if self.interactive_image_files:
-            self.image_index_var.set(f"{self.interactive_current_index + 1}/{len(self.interactive_image_files)}")
-        else:
-            self.image_index_var.set("0/0")
-    
-    def set_output_directory(self):
-        """设置输出目录"""
-        directory = filedialog.askdirectory(title="选择输出目录")
-        if directory:
-            self.output_directory = directory
-            self.status_var.set(f"输出目录已设置为: {directory}")
-    
     def save_current_image_with_roi(self):
         """保存当前3D切片图像和ROI数据（统一保存功能）"""
         if not self.roi_list:

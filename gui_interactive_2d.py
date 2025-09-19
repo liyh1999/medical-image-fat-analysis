@@ -235,28 +235,6 @@ class Interactive2DGUI(BaseGUI):
                 messagebox.showerror("错误", f"加载ROI掩码失败: {str(e)}")
                 logger.error(f"加载ROI掩码失败: {str(e)}")
     
-    def convert_mask_to_roi_list(self, roi_mask):
-        """将掩码转换为ROI列表"""
-        # 查找轮廓
-        contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        self.roi_list = []
-        for i, contour in enumerate(contours):
-            # 计算轮廓面积
-            area = cv2.contourArea(contour)
-            if area < 100:  # 过滤面积小于100像素的区域
-                continue
-            
-            # 创建多边形ROI
-            roi = {
-                'type': 'polygon',
-                'points': contour.reshape(-1, 2).tolist(),
-                'fat_fraction': None
-            }
-            self.roi_list.append(roi)
-        
-        logger.info(f"从掩码转换得到 {len(self.roi_list)} 个ROI")
-    
     def display_image(self):
         """显示图像"""
         if self.ff_image is None:
@@ -311,20 +289,6 @@ class Interactive2DGUI(BaseGUI):
         
         # 绘制ROI和脂肪分数
         self.draw_rois_on_canvas()
-    
-    def update_image_index(self):
-        """更新图像索引显示"""
-        if self.interactive_image_files:
-            self.image_index_var.set(f"{self.interactive_current_index + 1}/{len(self.interactive_image_files)}")
-        else:
-            self.image_index_var.set("0/0")
-    
-    def set_output_directory(self):
-        """设置输出目录"""
-        directory = filedialog.askdirectory(title="选择输出目录")
-        if directory:
-            self.output_directory = directory
-            self.status_var.set(f"输出目录已设置为: {directory}")
     
     def save_current_image_with_roi(self):
         """保存当前图像和ROI"""

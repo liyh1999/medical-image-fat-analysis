@@ -503,47 +503,6 @@ class Batch3DGUI(BaseGUI):
             logger.error(f"计算2D脂肪分数失败 {image_file}: {str(e)}")
             return None
     
-    def find_corresponding_label(self, image_file):
-        """查找对应的标签文件"""
-        if not self.batch_labels_dir:
-            return None
-        
-        # 尝试直接匹配
-        base_name = os.path.splitext(image_file)[0]
-        label_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.nii', '.nii.gz']
-        
-        for ext in label_extensions:
-            label_file = f"{base_name}_roi{ext}"
-            label_path = os.path.join(self.batch_labels_dir, label_file)
-            if os.path.exists(label_path):
-                return label_path
-        
-        # 尝试模糊匹配
-        return self.fuzzy_match_label(image_file, label_extensions)
-    
-    def fuzzy_match_label(self, image_file, label_extensions):
-        """模糊匹配标签文件"""
-        if not self.batch_labels_dir:
-            return None
-        
-        base_name = os.path.splitext(image_file)[0]
-        
-        # 获取所有标签文件
-        label_files = []
-        for file in os.listdir(self.batch_labels_dir):
-            if any(file.lower().endswith(ext) for ext in label_extensions):
-                label_files.append(file)
-        
-        # 尝试模糊匹配
-        for label_file in label_files:
-            label_base = os.path.splitext(label_file)[0]
-            
-            # 检查是否包含图像文件名
-            if base_name in label_base or label_base in base_name:
-                return os.path.join(self.batch_labels_dir, label_file)
-        
-        return None
-    
     def batch_processing_completed(self):
         """批量处理完成"""
         self.batch_processing = False
@@ -656,28 +615,6 @@ class Batch3DGUI(BaseGUI):
             messagebox.showerror("错误", f"加载文件失败: {str(e)}")
             logger.error(f"加载文件失败: {str(e)}")
     
-    def convert_mask_to_roi_list(self, roi_mask):
-        """将掩码转换为ROI列表"""
-        # 查找轮廓
-        contours, _ = cv2.findContours(roi_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        self.roi_list = []
-        for i, contour in enumerate(contours):
-            # 计算轮廓面积
-            area = cv2.contourArea(contour)
-            if area < 100:  # 过滤面积小于100像素的区域
-                continue
-            
-            # 创建多边形ROI
-            roi = {
-                'type': 'polygon',
-                'points': contour.reshape(-1, 2).tolist(),
-                'fat_fraction': None
-            }
-            self.roi_list.append(roi)
-        
-        logger.info(f"从掩码转换得到 {len(self.roi_list)} 个ROI")
-    
     def display_batch_result(self, index):
         """显示批量处理结果"""
         if index >= len(self.batch_results):
@@ -699,13 +636,6 @@ class Batch3DGUI(BaseGUI):
             self.batch_index_var.set(f"{self.batch_current_image_index + 1}/{len(self.batch_image_files)}")
         else:
             self.batch_index_var.set("0/0")
-    
-    def set_output_directory(self):
-        """设置输出目录"""
-        directory = filedialog.askdirectory(title="选择输出目录")
-        if directory:
-            self.output_directory = directory
-            self.status_var.set(f"输出目录已设置为: {directory}")
     
     def export_batch_results(self):
         """导出批量处理结果"""
