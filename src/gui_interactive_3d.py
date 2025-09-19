@@ -257,7 +257,7 @@ class Interactive3DGUI(BaseGUI):
         
         # 更新显示
         self.display_image()
-        self.update_output_display()
+        self.update_interactive_roi_info()
     
     def save_polygon_roi(self):
         """保存多边形ROI（3D模式）"""
@@ -289,7 +289,7 @@ class Interactive3DGUI(BaseGUI):
         
         # 更新显示
         self.display_image()
-        self.update_output_display()
+        self.update_interactive_roi_info()
     
     def draw_current_roi(self):
         """绘制当前正在绘制的ROI（3D模式 - 支持旋转）"""
@@ -570,6 +570,9 @@ class Interactive3DGUI(BaseGUI):
             logger.debug(f"3D模式坐标信息: scale_factor={self.scale_factor}, offset_x={self.image_offset_x}, offset_y={self.image_offset_y}")
             logger.debug(f"3D模式图像尺寸: {display_image.shape}, 画布尺寸: {canvas_width}x{canvas_height}")
             
+            # 更新ROI信息显示
+            self.update_interactive_roi_info()
+            
         except Exception as e:
             logger.error(f"显示3D切片失败: {str(e)}")
             if hasattr(self, 'status_var') and self.status_var:
@@ -618,6 +621,12 @@ class Interactive3DGUI(BaseGUI):
         # ROI操作按钮
         ttk.Button(self.toolbar, text="删除ROI", command=self.delete_last_roi).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="清除所有", command=self.clear_all_roi).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 调试日志勾选框
+        self.debug_var = tk.BooleanVar(value=False)
+        debug_checkbox = ttk.Checkbutton(self.toolbar, text="调试日志", variable=self.debug_var, 
+                                       command=self.toggle_debug_logging)
+        debug_checkbox.pack(side=tk.LEFT, padx=(10, 5))
         
         # 保存按钮（统一保存功能）
         ttk.Button(self.toolbar, text="保存", command=self.save_3d_roi_data).pack(side=tk.LEFT, padx=(0, 5))
@@ -765,7 +774,7 @@ class Interactive3DGUI(BaseGUI):
             # 显示图像
             self.display_image()
             self.update_image_info()
-            self.update_roi_info()
+            self.update_interactive_roi_info()
             
         except Exception as e:
             logger.error(f"加载3D切片失败: {str(e)}")
@@ -841,7 +850,7 @@ class Interactive3DGUI(BaseGUI):
                 # 显示图像
                 self.display_image()
                 self.update_image_info()
-                self.update_roi_info()
+                self.update_interactive_roi_info()
             
             # 检查是否有对应的ROI数据
             if current_file in self.image_roi_dict:

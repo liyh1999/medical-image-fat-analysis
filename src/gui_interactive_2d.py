@@ -57,6 +57,12 @@ class Interactive2DGUI(BaseGUI):
         ttk.Button(self.toolbar, text="删除ROI", command=self.delete_last_roi).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="清除所有", command=self.clear_all_roi).pack(side=tk.LEFT, padx=(0, 5))
         
+        # 调试日志勾选框
+        self.debug_var = tk.BooleanVar(value=False)
+        debug_checkbox = ttk.Checkbutton(self.toolbar, text="调试日志", variable=self.debug_var, 
+                                       command=self.toggle_debug_logging)
+        debug_checkbox.pack(side=tk.LEFT, padx=(10, 5))
+        
         # 保存按钮（统一保存功能）
         ttk.Button(self.toolbar, text="保存", command=self.save_current_image_with_roi).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(self.toolbar, text="设置输出目录", command=self.set_output_directory).pack(side=tk.LEFT, padx=(0, 5))
@@ -133,7 +139,7 @@ class Interactive2DGUI(BaseGUI):
             # 显示图像
             self.display_image()
             self.update_image_info()
-            self.update_roi_info()
+            self.update_interactive_roi_info()
             self.update_image_index()
             
             self.status_var.set(f"已加载: {current_file}")
@@ -208,7 +214,7 @@ class Interactive2DGUI(BaseGUI):
                 # 显示图像
                 self.display_image()
                 self.update_image_info()
-                self.update_roi_info()
+                self.update_interactive_roi_info()
                 
                 self.status_var.set(f"已加载: {os.path.basename(file_path)}")
                 
@@ -232,8 +238,8 @@ class Interactive2DGUI(BaseGUI):
         if len(display_image.shape) == 2:
             display_image = cv2.cvtColor(display_image, cv2.COLOR_GRAY2BGR)
         
-        # 绘制ROI
-        self.draw_rois_on_image(display_image)
+        # 绘制ROI（使用基类方法，避免双重旋转）
+        display_image = self.draw_rois_on_image(display_image)
         
         # 绘制临时多边形（如果正在绘制）
         if self.current_roi_type == 'polygon' and len(self.polygon_points) > 0:
@@ -251,7 +257,7 @@ class Interactive2DGUI(BaseGUI):
             scale_y = canvas_height / display_image.shape[0]
             self.scale_factor = min(scale_x, scale_y, 1.0)
             
-            # 计算图像在画布中的位置
+            # 计算图像在画布中的位置（居中显示）
             new_width = int(display_image.shape[1] * self.scale_factor)
             new_height = int(display_image.shape[0] * self.scale_factor)
             
@@ -260,17 +266,127 @@ class Interactive2DGUI(BaseGUI):
             
             # 调整图像大小
             pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        else:
+            self.scale_factor = 1.0
+            self.image_offset_x = 0
+            self.image_offset_y = 0
         
-        # 转换为Tkinter图像
-        self.image_tk = ImageTk.PhotoImage(pil_image)
-        
-        # 清空画布并显示图像
+        # 转换为PhotoImage并显示
+        self.photo = ImageTk.PhotoImage(pil_image)
         self.canvas.delete("all")
         self.canvas.create_image(self.image_offset_x, self.image_offset_y, 
-                               anchor=tk.NW, image=self.image_tk)
+                               anchor=tk.NW, image=self.photo)
         
-        # 绘制ROI和脂肪分数
-        self.draw_rois_on_canvas()
+        # 更新图像信息
+        self.update_image_info()
+        self.update_interactive_roi_info()
+    
+    def draw_rois_on_image_2d(self, image):
+        """在图像上绘制ROI（2D模式 - 在ROI中心显示标签）"""
+        for i, roi in enumerate(self.roi_list):
+            # 根据旋转角度调整坐标
+            if self.rotation_angle != 0:
+                if roi['type'] == 'rectangle':
+                    start = self.rotate_roi_coordinates_for_display([roi['start']], self.rotation_angle)[0]
+                    end = self.rotate_roi_coordinates_for_display([roi['end']], self.rotation_angle)[0]
+                elif roi['type'] == 'circle':
+                    center = self.rotate_roi_coordinates_for_display([roi['center']], self.rotation_angle)[0]
+                    radius = roi['radius']
+                elif roi['type'] == 'polygon':
+                    points = self.rotate_roi_coordinates_for_display(roi['points'], self.rotation_angle)
+            else:
+                if roi['type'] == 'rectangle':
+                    start = roi['start']
+                    end = roi['end']
+                elif roi['type'] == 'circle':
+                    center = roi['center']
+                    radius = roi['radius']
+                elif roi['type'] == 'polygon':
+                    points = roi['points']
+            
+            # 绘制ROI
+            color = (0, 255, 0)  # 绿色
+            thickness = 2
+            
+            if roi['type'] == 'rectangle':
+                x1, y1 = int(start[0]), int(start[1])
+                x2, y2 = int(end[0]), int(end[1])
+                cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+                
+                # 计算中心点
+                center_x = (x1 + x2) // 2
+                center_y = (y1 + y2) // 2
+                
+                # 添加ROI标签和脂肪分数
+                if 'fat_fraction' in roi and roi['fat_fraction']:
+                    ff_data = roi['fat_fraction']
+                    if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                        ff_value = ff_data['fat_fraction']
+                    else:
+                        ff_value = ff_data.get('mean_fat_fraction', 0)
+                    text = f'ROI{i+1}: {ff_value:.3f}'
+                else:
+                    text = f'ROI{i+1}'
+                
+                # 在ROI中心显示文本
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                text_x = center_x - text_size[0] // 2
+                text_y = center_y + text_size[1] // 2
+                cv2.putText(image, text, (text_x, text_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)  # 黄色
+                
+            elif roi['type'] == 'circle':
+                cx = int(center[0])
+                cy = int(center[1])
+                r = int(radius)
+                cv2.circle(image, (cx, cy), r, color, thickness)
+                
+                # 添加ROI标签和脂肪分数
+                if 'fat_fraction' in roi and roi['fat_fraction']:
+                    ff_data = roi['fat_fraction']
+                    if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                        ff_value = ff_data['fat_fraction']
+                    else:
+                        ff_value = ff_data.get('mean_fat_fraction', 0)
+                    text = f'ROI{i+1}: {ff_value:.3f}'
+                else:
+                    text = f'ROI{i+1}'
+                
+                # 在圆心显示文本
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                text_x = cx - text_size[0] // 2
+                text_y = cy + text_size[1] // 2
+                cv2.putText(image, text, (text_x, text_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)  # 黄色
+                
+            elif roi['type'] == 'polygon':
+                # 绘制多边形
+                points = np.array(points, dtype=np.int32)
+                cv2.polylines(image, [points], True, color, thickness)
+                
+                # 计算中心点
+                center_x = int(np.mean([p[0] for p in points]))
+                center_y = int(np.mean([p[1] for p in points]))
+                
+                # 添加ROI标签和脂肪分数
+                if 'fat_fraction' in roi and roi['fat_fraction']:
+                    ff_data = roi['fat_fraction']
+                    if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                        ff_value = ff_data['fat_fraction']
+                    else:
+                        ff_value = ff_data.get('mean_fat_fraction', 0)
+                    text = f'ROI{i+1}: {ff_value:.3f}'
+                else:
+                    text = f'ROI{i+1}'
+                
+                # 在多边形中心显示文本
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                text_x = center_x - text_size[0] // 2
+                text_y = center_y + text_size[1] // 2
+                cv2.putText(image, text, (text_x, text_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)  # 黄色
+        
+        return image
     
     def save_current_image_with_roi(self):
         """保存2D图像ROI数据（智能批量保存）"""

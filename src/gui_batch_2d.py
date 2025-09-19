@@ -27,7 +27,31 @@ class Batch2DGUI(BaseGUI):
         self.batch_image_files = []
         
         # 状态变量
-        self.status_var = tk.StringVar(value="批量处理2D模式：请选择图像文件夹")
+        self.status_var = tk.StringVar(value="批量处理2D模式：请先选择图像文件夹")
+    
+    def on_mouse_click(self, event):
+        """禁用鼠标点击绘制功能"""
+        pass
+    
+    def on_mouse_drag(self, event):
+        """禁用鼠标拖拽绘制功能"""
+        pass
+    
+    def on_mouse_release(self, event):
+        """禁用鼠标释放绘制功能"""
+        pass
+    
+    def delete_last_roi(self):
+        """禁用删除ROI功能"""
+        pass
+    
+    def clear_all_roi(self):
+        """禁用清空ROI功能"""
+        pass
+    
+    def draw_current_roi(self):
+        """禁用绘制当前ROI功能"""
+        pass
     
     def display_image(self):
         """显示批量处理图像"""
@@ -80,7 +104,15 @@ class Batch2DGUI(BaseGUI):
         if self.batch_image_files:
             self.batch_index_var.set(f"{self.batch_current_index + 1}/{len(self.batch_image_files)}")
             current_file = self.batch_image_files[self.batch_current_index]
-            self.status_var.set(f"当前图像: {os.path.basename(current_file)} | ROI数量: {len(self.roi_list)}")
+            if self.batch_labels_dir and self.roi_list:
+                self.status_var.set(f"当前图像: {os.path.basename(current_file)} | ROI数量: {len(self.roi_list)}")
+            elif self.batch_labels_dir:
+                self.status_var.set(f"当前图像: {os.path.basename(current_file)} | 未找到标签文件")
+            else:
+                self.status_var.set(f"当前图像: {os.path.basename(current_file)} | 请选择标签文件夹以显示标签")
+        
+        # 更新ROI信息显示（2D批量模式专用）
+        self.update_batch_2d_roi_info()
         
     def create_toolbar(self, parent):
         """创建批量处理模式工具栏"""
@@ -159,6 +191,10 @@ class Batch2DGUI(BaseGUI):
         if folder_path:
             self.batch_labels_dir = folder_path
             self.status_var.set(f"标签文件夹已设置为: {folder_path}")
+            
+            # 如果当前有图像显示，重新加载当前图像以显示标签
+            if hasattr(self, 'batch_current_index') and self.batch_image_files:
+                self.show_batch_image_by_index(self.batch_current_index)
     
     def load_batch_images(self):
         """加载批量图像列表"""
@@ -179,7 +215,10 @@ class Batch2DGUI(BaseGUI):
         if self.batch_image_files:
             self.batch_current_index = 0
             self.show_first_batch_image()
-            self.status_var.set(f"已加载 {len(self.batch_image_files)} 张图像")
+            if self.batch_labels_dir:
+                self.status_var.set(f"已加载 {len(self.batch_image_files)} 张图像，标签文件夹已设置")
+            else:
+                self.status_var.set(f"已加载 {len(self.batch_image_files)} 张图像，请选择标签文件夹以显示标签")
         else:
             messagebox.showwarning("警告", "文件夹中没有找到图像文件")
     
@@ -260,7 +299,7 @@ class Batch2DGUI(BaseGUI):
                         fat_fraction = self.calculate_roi_fat_fraction(ff_image, roi)
                         roi['fat_fraction'] = fat_fraction
                         image_results.append(roi)
-                        logger.info(f"ROI {j+1} 脂肪分数: {fat_fraction:.3f}")
+                        logger.info(f"ROI {j+1} 脂肪分数: {fat_fraction['fat_fraction']:.3f}")
                     except Exception as e:
                         logger.error(f"计算ROI {j+1} 脂肪分数失败: {str(e)}")
                 
@@ -271,7 +310,7 @@ class Batch2DGUI(BaseGUI):
                         'label_path': label_path,
                         'roi_count': len(image_results),
                         'roi_data': image_results,
-                        'mean_fat_fraction': np.mean([roi['fat_fraction'] for roi in image_results])
+                        'mean_fat_fraction': np.mean([roi['fat_fraction']['fat_fraction'] for roi in image_results])
                     }
                     self.batch_results.append(result)
                     processed_count += 1
@@ -287,7 +326,7 @@ class Batch2DGUI(BaseGUI):
             self.root.after(0, lambda: self.batch_processing_error(str(e)))
     
     def calculate_roi_fat_fraction(self, ff_image, roi):
-        """计算ROI的脂肪分数"""
+        """计算ROI的脂肪分数（2D批量模式专用，返回详细统计信息）"""
         try:
             # 根据ROI类型提取像素值
             if roi['type'] == 'rectangle':
@@ -308,31 +347,97 @@ class Batch2DGUI(BaseGUI):
                 cv2.fillPoly(mask, [points], 1)
                 roi_pixels = ff_image[mask == 1]
             else:
-                return 0.0
+                return {
+                    'fat_fraction': 0.0,
+                    'mean_fat_fraction': 0.0,
+                    'std_fat_fraction': 0.0,
+                    'median_fat_fraction': 0.0,
+                    'min_fat_fraction': 0.0,
+                    'max_fat_fraction': 0.0,
+                    'pixel_count': 0,
+                    'coverage_percentage': 0.0,
+                    'normalized': False
+                }
             
             if len(roi_pixels) == 0:
-                return 0.0
+                return {
+                    'fat_fraction': 0.0,
+                    'mean_fat_fraction': 0.0,
+                    'std_fat_fraction': 0.0,
+                    'median_fat_fraction': 0.0,
+                    'min_fat_fraction': 0.0,
+                    'max_fat_fraction': 0.0,
+                    'pixel_count': 0,
+                    'coverage_percentage': 0.0,
+                    'normalized': False
+                }
             
             # 计算脂肪分数
             pixel_values = roi_pixels.flatten()
             pixel_values = pixel_values[pixel_values > 0]  # 排除背景
             
             if len(pixel_values) == 0:
-                return 0.0
+                return {
+                    'fat_fraction': 0.0,
+                    'mean_fat_fraction': 0.0,
+                    'std_fat_fraction': 0.0,
+                    'median_fat_fraction': 0.0,
+                    'min_fat_fraction': 0.0,
+                    'max_fat_fraction': 0.0,
+                    'pixel_count': 0,
+                    'coverage_percentage': 0.0,
+                    'normalized': False
+                }
             
-            # 归一化到0-1范围
-            if pixel_values.max() > 100:
-                pixel_values = pixel_values / 255.0
+            # 检测图像像素值范围并决定是否需要归一化
+            min_pixel = np.min(ff_image)
+            max_pixel = np.max(ff_image)
+            
+            # 判断是否需要归一化
+            if max_pixel <= 100 and min_pixel >= 0:
+                normalized_pixel_values = pixel_values.astype(np.float32)
+                normalized = False
             else:
-                pixel_values = pixel_values / 100.0
+                normalized_pixel_values = pixel_values.astype(np.float32) / max_pixel
+                normalized = True
             
-            # 计算平均脂肪分数
-            fat_fraction = np.mean(pixel_values)
-            return float(fat_fraction)
+            # 计算统计信息
+            mean_ff = np.mean(normalized_pixel_values)
+            std_ff = np.std(normalized_pixel_values)
+            median_ff = np.median(normalized_pixel_values)
+            min_ff = np.min(normalized_pixel_values)
+            max_ff = np.max(normalized_pixel_values)
+            pixel_count = len(normalized_pixel_values)
+            
+            # 计算覆盖率（ROI面积占图像总面积的比例）
+            total_pixels = ff_image.shape[0] * ff_image.shape[1]
+            coverage_percentage = (pixel_count / total_pixels) * 100
+            
+            return {
+                'fat_fraction': float(mean_ff),  # 用于显示的主要值
+                'mean_fat_fraction': float(mean_ff),
+                'std_fat_fraction': float(std_ff),
+                'median_fat_fraction': float(median_ff),
+                'min_fat_fraction': float(min_ff),
+                'max_fat_fraction': float(max_ff),
+                'pixel_count': int(pixel_count),
+                'coverage_percentage': float(coverage_percentage),
+                'normalized': bool(normalized)
+            }
             
         except Exception as e:
             logger.error(f"计算脂肪分数失败: {str(e)}")
-            return 0.0
+            return {
+                'fat_fraction': 0.0,
+                'mean_fat_fraction': 0.0,
+                'std_fat_fraction': 0.0,
+                'median_fat_fraction': 0.0,
+                'min_fat_fraction': 0.0,
+                'max_fat_fraction': 0.0,
+                'pixel_count': 0,
+                'coverage_percentage': 0.0,
+                'normalized': False
+            }
     
     def batch_processing_completed(self):
         """批量处理完成"""
@@ -375,11 +480,6 @@ class Batch2DGUI(BaseGUI):
         if not self.batch_image_files or index >= len(self.batch_image_files):
             return
         
-        # 检查是否有标签文件夹
-        if not self.batch_labels_dir:
-            messagebox.showwarning("警告", "请先选择标签文件夹才能查看图像和标签")
-            return
-        
         try:
             # 加载图像
             image_file = self.batch_image_files[index]
@@ -389,30 +489,34 @@ class Batch2DGUI(BaseGUI):
             if self.ff_image is None:
                 raise ValueError(f"无法加载图像: {image_path}")
             
-            # 查找对应的标签文件
-            logger.debug(f"开始查找标签文件: {image_file}")
-            logger.debug(f"batch_labels_dir: {getattr(self, 'batch_labels_dir', 'NOT SET')}")
-            label_path = self.find_corresponding_label(image_file)
-            logger.debug(f"find_corresponding_label返回: {label_path}")
-            if label_path:
-                self.roi_mask = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
-                if self.roi_mask is not None:
-                    # 将掩码转换为ROI列表
-                    self.roi_list = self.convert_mask_to_roi_list(self.roi_mask)
-                    
-                    # 计算每个ROI的脂肪分数
-                    for roi in self.roi_list:
-                        fat_fraction = self.calculate_roi_fat_fraction(self.ff_image, roi)
-                        roi['fat_fraction'] = fat_fraction
-                    
-                    logger.info(f"从标签文件加载了 {len(self.roi_list)} 个ROI: {os.path.basename(label_path)}")
+            # 初始化ROI列表
+            self.roi_list = []
+            self.roi_mask = None
+            
+            # 如果有标签文件夹，则查找对应的标签文件
+            if self.batch_labels_dir:
+                logger.debug(f"开始查找标签文件: {image_file}")
+                logger.debug(f"batch_labels_dir: {self.batch_labels_dir}")
+                label_path = self.find_corresponding_label(image_file)
+                logger.debug(f"find_corresponding_label返回: {label_path}")
+                if label_path:
+                    self.roi_mask = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
+                    if self.roi_mask is not None:
+                        # 将掩码转换为ROI列表
+                        self.roi_list = self.convert_mask_to_roi_list(self.roi_mask)
+                        
+                        # 计算每个ROI的脂肪分数
+                        for roi in self.roi_list:
+                            fat_fraction = self.calculate_roi_fat_fraction(self.ff_image, roi)
+                            roi['fat_fraction'] = fat_fraction
+                        
+                        logger.info(f"从标签文件加载了 {len(self.roi_list)} 个ROI: {os.path.basename(label_path)}")
+                    else:
+                        logger.warning(f"无法加载标签文件: {label_path}")
                 else:
-                    self.roi_list = []
-                    logger.warning(f"无法加载标签文件: {label_path}")
+                    logger.info(f"未找到对应的标签文件: {image_file}")
             else:
-                self.roi_list = []
-                self.roi_mask = None
-                logger.info(f"未找到对应的标签文件: {image_file}")
+                logger.info("未选择标签文件夹，仅显示图像")
             
             # 重置旋转角度
             self.rotation_angle = 0
@@ -453,6 +557,76 @@ class Batch2DGUI(BaseGUI):
         else:
             self.batch_index_var.set("0/0")
     
+    def update_batch_2d_roi_info(self):
+        """更新2D批量模式ROI信息显示（独立于其他模式）"""
+        if hasattr(self, 'output_text') and self.output_text:
+            self.output_text.delete(1.0, tk.END)
+            
+            if not self.roi_list:
+                self.output_text.insert(tk.END, "暂无ROI数据\n\n请选择标签文件夹以显示ROI")
+                return
+            
+            # 显示所有ROI的计算结果
+            output_lines = []
+            output_lines.append(f"ROI总数: {len(self.roi_list)}\n")
+            output_lines.append("=" * 40 + "\n")
+            
+            for i, roi in enumerate(self.roi_list):
+                output_lines.append(f"ROI #{i+1} ({roi['type']}):\n")
+                
+                if 'fat_fraction' in roi and roi['fat_fraction'] is not None:
+                    ff = roi['fat_fraction']
+                    
+                    # 2D批量模式：fat_fraction现在是详细统计字典
+                    if isinstance(ff, dict):
+                        output_lines.append(f"  脂肪分数: {ff['fat_fraction']:.3f}\n")
+                        
+                        # 分布信息
+                        output_lines.append("\n【分布信息】\n")
+                        range_val = ff['max_fat_fraction'] - ff['min_fat_fraction']
+                        output_lines.append(f"  数值范围: {range_val:.3f}\n")
+                        mean_val = ff['mean_fat_fraction']
+                        std_val = ff['std_fat_fraction']
+                        cv = (std_val / mean_val) * 100 if mean_val > 0 else 0
+                        output_lines.append(f"  变异系数: {cv:.2f}%\n")
+                        
+                        # 区域信息
+                        output_lines.append("\n【区域信息】\n")
+                        output_lines.append(f"  像素数量: {ff['pixel_count']:,}\n")
+                        output_lines.append(f"  覆盖率: {ff['coverage_percentage']:.2f}%\n")
+                        
+                        # 质量评估
+                        output_lines.append("\n【质量评估】\n")
+                        std_val = ff['std_fat_fraction']
+                        if std_val < 0.05:
+                            quality = "优秀"
+                        elif std_val < 0.1:
+                            quality = "良好"
+                        elif std_val < 0.2:
+                            quality = "一般"
+                        else:
+                            quality = "较差"
+                        output_lines.append(f"  数据质量: {quality}\n")
+                        output_lines.append(f"  归一化: {'是' if ff['normalized'] else '否'}\n")
+                    else:
+                        # 兼容旧格式（简单数值）
+                        output_lines.append(f"  脂肪分数: {ff:.3f}\n")
+                        output_lines.append("\n【分布信息】\n")
+                        output_lines.append(f"  数值范围: 无法计算\n")
+                        output_lines.append(f"  变异系数: 无法计算\n")
+                        output_lines.append("\n【区域信息】\n")
+                        output_lines.append(f"  像素数量: 无法计算\n")
+                        output_lines.append(f"  覆盖率: 无法计算\n")
+                        output_lines.append("\n【质量评估】\n")
+                        output_lines.append(f"  数据质量: 无法评估\n")
+                        output_lines.append(f"  归一化: 否\n")
+                else:
+                    output_lines.append("  未计算脂肪分数\n")
+                
+                output_lines.append("=" * 40 + "\n")
+            
+            self.output_text.insert(tk.END, "".join(output_lines))
+    
     def export_batch_results(self):
         """导出批量处理结果"""
         if not self.batch_results:
@@ -473,9 +647,14 @@ class Batch2DGUI(BaseGUI):
                     # 准备JSON数据
                     roi_data = []
                     for roi in result['roi_data']:
+                        if isinstance(roi['fat_fraction'], dict):
+                            fat_fraction_value = roi['fat_fraction']['fat_fraction']
+                        else:
+                            fat_fraction_value = roi['fat_fraction'] if isinstance(roi['fat_fraction'], (int, float)) else 0
+                        
                         roi_data.append({
                             'type': roi['type'],
-                            'fat_fraction': roi['fat_fraction'],
+                            'fat_fraction': fat_fraction_value,
                             'start': roi.get('start', []),
                             'end': roi.get('end', []),
                             'center': roi.get('center', []),
@@ -501,11 +680,16 @@ class Batch2DGUI(BaseGUI):
             summary_data = []
             for result in self.batch_results:
                 for i, roi in enumerate(result['roi_data']):
+                    if isinstance(roi['fat_fraction'], dict):
+                        fat_fraction_value = roi['fat_fraction']['fat_fraction']
+                    else:
+                        fat_fraction_value = roi['fat_fraction'] if isinstance(roi['fat_fraction'], (int, float)) else 0
+                    
                     summary_data.append({
                         '图像文件': result['image_file'],
                         'ROI编号': i + 1,
                         'ROI类型': roi['type'],
-                        '脂肪分数': roi['fat_fraction'],
+                        '脂肪分数': fat_fraction_value,
                         '平均脂肪分数': result['mean_fat_fraction'],
                         'ROI总数': result['roi_count']
                     })

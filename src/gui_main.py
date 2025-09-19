@@ -105,7 +105,10 @@ class MainGUI:
             self.current_gui.on_closing()
         
         # 关闭主窗口
-        self.root.destroy()
+        try:
+            self.root.destroy()
+        except Exception as e:
+            logger.debug(f"关闭主窗口时出现异常: {str(e)}")
 
 def main():
     """主函数"""

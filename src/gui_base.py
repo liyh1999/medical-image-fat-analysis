@@ -39,6 +39,7 @@ class BaseGUI:
         self.results = {}
         self.current_roi_type = 'rectangle'
         self.roi_type_var = tk.StringVar(value="rectangle")
+        self.roi_info_var = tk.StringVar(value="无ROI")  # ROI信息显示
         self.roi_list = []  # 当前图像的ROI列表
         self.image_roi_dict = {}  # 存储每张图像的ROI字典 {image_file: [roi_list]}
         self.debug_enabled = False  # 调试日志开关
@@ -105,6 +106,9 @@ class BaseGUI:
         # 右侧控制面板
         self.create_control_panel(content_frame)
         
+        # 初始化输出显示
+        self.update_output_display()
+        
         
     def create_toolbar(self, parent):
         """创建工具栏"""
@@ -158,46 +162,115 @@ class BaseGUI:
             for i, roi in enumerate(self.roi_list):
                 output_lines.append(f"ROI #{i+1} ({roi['type']}):\n")
                 
+                # 显示标签值（如果是3D批量处理）
+                if 'label_value' in roi:
+                    output_lines.append(f"  标签值: {roi['label_value']}\n")
+                
                 if 'fat_fraction' in roi and roi['fat_fraction']:
                     ff = roi['fat_fraction']
                     
-                    # 基本统计信息
-                    output_lines.append("【基本统计】\n")
-                    output_lines.append(f"  平均脂肪分数: {ff['mean_fat_fraction']:.3f}\n")
-                    output_lines.append(f"  标准差: {ff['std_fat_fraction']:.3f}\n")
-                    output_lines.append(f"  中位数: {ff['median_fat_fraction']:.3f}\n")
-                    output_lines.append(f"  最小值: {ff['min_fat_fraction']:.3f}\n")
-                    output_lines.append(f"  最大值: {ff['max_fat_fraction']:.3f}\n")
+                    # 检查FF数据结构
+                    if isinstance(ff, dict):
+                        # 3D批量处理的FF数据结构
+                        if 'fat_fraction' in ff:
+                            # 基本统计信息
+                            output_lines.append("【基本统计】\n")
+                            output_lines.append(f"  脂肪分数: {ff['fat_fraction']:.3f}\n")
+                            # 检查是否有3D批量处理的字段
+                            if 'mean' in ff:
+                                output_lines.append(f"  像素均值: {ff['mean']:.2f}\n")
+                                output_lines.append(f"  标准差: {ff['std']:.2f}\n")
+                                output_lines.append(f"  最小值: {ff['min']:.0f}\n")
+                                output_lines.append(f"  最大值: {ff['max']:.0f}\n")
+                                output_lines.append(f"  像素数量: {ff['pixel_count']:,}\n")
+                            else:
+                                # 交互模式的字段
+                                output_lines.append(f"  像素均值: {ff.get('mean_fat_fraction', 0):.2f}\n")
+                                output_lines.append(f"  标准差: {ff.get('std_fat_fraction', 0):.2f}\n")
+                                output_lines.append(f"  最小值: {ff.get('min_fat_fraction', 0):.3f}\n")
+                                output_lines.append(f"  最大值: {ff.get('max_fat_fraction', 0):.3f}\n")
+                                output_lines.append(f"  像素数量: {ff.get('pixel_count', 0):,}\n")
+                        else:
+                            # 2D交互模式的FF数据结构
+                            output_lines.append("【基本统计】\n")
+                            output_lines.append(f"  平均脂肪分数: {ff.get('mean_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  标准差: {ff.get('std_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  中位数: {ff.get('median_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  最小值: {ff.get('min_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  最大值: {ff.get('max_fat_fraction', 0):.3f}\n")
+                    else:
+                        # 简单的数值
+                        output_lines.append(f"  脂肪分数: {ff:.3f}\n")
                     
                     # 分布信息
                     output_lines.append("\n【分布信息】\n")
-                    range_val = ff['max_fat_fraction'] - ff['min_fat_fraction']
-                    output_lines.append(f"  数值范围: {range_val:.3f}\n")
-                    cv = (ff['std_fat_fraction'] / ff['mean_fat_fraction']) * 100 if ff['mean_fat_fraction'] > 0 else 0
-                    output_lines.append(f"  变异系数: {cv:.2f}%\n")
+                    if isinstance(ff, dict) and 'fat_fraction' in ff:
+                        # 3D批量处理
+                        range_val = ff['max'] - ff['min']
+                        output_lines.append(f"  像素值范围: {range_val:.0f}\n")
+                        cv = (ff['std'] / ff['mean']) * 100 if ff['mean'] > 0 else 0
+                        output_lines.append(f"  变异系数: {cv:.2f}%\n")
+                    else:
+                        # 2D交互模式或简单数值
+                        if isinstance(ff, dict):
+                            range_val = ff.get('max_fat_fraction', 0) - ff.get('min_fat_fraction', 0)
+                            output_lines.append(f"  数值范围: {range_val:.3f}\n")
+                            cv = (ff.get('std_fat_fraction', 0) / ff.get('mean_fat_fraction', 1)) * 100 if ff.get('mean_fat_fraction', 0) > 0 else 0
+                            output_lines.append(f"  变异系数: {cv:.2f}%\n")
+                        else:
+                            # 简单数值，无法计算范围和变异系数
+                            output_lines.append(f"  数值范围: 无法计算\n")
+                            output_lines.append(f"  变异系数: 无法计算\n")
                     
                     # 区域信息
                     output_lines.append("\n【区域信息】\n")
-                    output_lines.append(f"  像素数量: {ff['pixel_count']:,}\n")
-                    output_lines.append(f"  覆盖率: {ff['coverage_percentage']:.2f}%\n")
+                    if isinstance(ff, dict) and 'fat_fraction' in ff:
+                        # 3D批量处理
+                        output_lines.append(f"  像素数量: {ff.get('pixel_count', 0):,}\n")
+                    else:
+                        # 2D交互模式或简单数值
+                        if isinstance(ff, dict):
+                            output_lines.append(f"  像素数量: {ff.get('pixel_count', 0):,}\n")
+                            output_lines.append(f"  覆盖率: {ff.get('coverage_percentage', 0):.2f}%\n")
+                        else:
+                            output_lines.append(f"  像素数量: 无法计算\n")
+                            output_lines.append(f"  覆盖率: 无法计算\n")
                     
                     # 质量评估
                     output_lines.append("\n【质量评估】\n")
-                    if ff['std_fat_fraction'] < 0.05:
-                        quality = "优秀"
-                    elif ff['std_fat_fraction'] < 0.1:
-                        quality = "良好"
-                    elif ff['std_fat_fraction'] < 0.2:
-                        quality = "一般"
+                    if isinstance(ff, dict) and 'fat_fraction' in ff:
+                        # 3D批量处理
+                        std_val = ff.get('std', 0)
+                        if std_val < 5:
+                            quality = "优秀"
+                        elif std_val < 10:
+                            quality = "良好"
+                        elif std_val < 20:
+                            quality = "一般"
+                        else:
+                            quality = "较差"
+                        output_lines.append(f"  数据质量: {quality}\n")
                     else:
-                        quality = "较差"
-                    output_lines.append(f"  数据质量: {quality}\n")
-                    
-                    # 归一化信息
-                    if ff.get('normalized', False):
-                        output_lines.append(f"  归一化: 是\n")
-                    else:
-                        output_lines.append(f"  归一化: 否\n")
+                        # 2D交互模式或简单数值
+                        if isinstance(ff, dict):
+                            std_val = ff.get('std_fat_fraction', 0)
+                            if std_val < 0.05:
+                                quality = "优秀"
+                            elif std_val < 0.1:
+                                quality = "良好"
+                            elif std_val < 0.2:
+                                quality = "一般"
+                            else:
+                                quality = "较差"
+                            output_lines.append(f"  数据质量: {quality}\n")
+                        else:
+                            output_lines.append(f"  数据质量: 无法评估\n")
+                        
+                        # 归一化信息
+                        if isinstance(ff, dict) and ff.get('normalized', False):
+                            output_lines.append(f"  归一化: 是\n")
+                        else:
+                            output_lines.append(f"  归一化: 否\n")
                 else:
                     output_lines.append("  未计算脂肪分数\n")
                 
@@ -533,6 +606,7 @@ class BaseGUI:
     
     def update_roi_info(self):
         """更新ROI信息显示"""
+        # 更新工具栏中的ROI信息（如果存在）
         if hasattr(self, 'roi_info_var') and self.roi_info_var:
             if self.roi_list:
                 total_area = 0
@@ -551,10 +625,187 @@ class BaseGUI:
                             area = 0
                     total_area += area
                 
+                # 计算FF值信息
+                ff_info = []
+                for i, roi in enumerate(self.roi_list):
+                    if roi.get('fat_fraction') is not None:
+                        ff_data = roi['fat_fraction']
+                        if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                            ff_value = ff_data['fat_fraction']
+                            ff_info.append(f"ROI{i+1}: {ff_value:.3f}")
+                        elif isinstance(ff_data, (int, float)):
+                            ff_value = ff_data
+                            ff_info.append(f"ROI{i+1}: {ff_value:.3f}")
+                        else:
+                            ff_info.append(f"ROI{i+1}: 无FF值")
+                    else:
+                        ff_info.append(f"ROI{i+1}: 无FF值")
+                
                 info_text = f"ROI数量: {len(self.roi_list)}\n总面积: {total_area:.0f} 像素"
+                if ff_info:
+                    info_text += f"\nFF值: {', '.join(ff_info)}"
                 self.roi_info_var.set(info_text)
             else:
                 self.roi_info_var.set("无ROI")
+        
+        # 更新右侧ROI计算结果框
+        self.update_output_display()
+    
+    def update_interactive_roi_info(self):
+        """更新交互模式ROI信息显示（独立于批量模式）"""
+        logger.debug(f"update_interactive_roi_info 被调用，ROI数量: {len(self.roi_list) if self.roi_list else 0}")
+        
+        # 更新工具栏中的ROI信息（如果存在）
+        if hasattr(self, 'roi_info_var') and self.roi_info_var:
+            if self.roi_list:
+                total_area = 0
+                for roi in self.roi_list:
+                    if roi['type'] == 'rectangle':
+                        x1, y1 = roi['start']
+                        x2, y2 = roi['end']
+                        area = abs((x2-x1) * (y2-y1))
+                    elif roi['type'] == 'circle':
+                        area = 3.14159 * roi['radius'] * roi['radius']
+                    elif roi['type'] == 'polygon':
+                        if len(roi['points']) >= 3:
+                            points = np.array(roi['points'], dtype=np.float32)
+                            area = cv2.contourArea(points)
+                        else:
+                            area = 0
+                    total_area += area
+                
+                # 计算FF值信息
+                ff_info = []
+                for i, roi in enumerate(self.roi_list):
+                    if roi.get('fat_fraction') is not None:
+                        ff_data = roi['fat_fraction']
+                        if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                            ff_value = ff_data['fat_fraction']
+                            ff_info.append(f"ROI{i+1}: {ff_value:.3f}")
+                        elif isinstance(ff_data, dict) and 'mean_fat_fraction' in ff_data:
+                            ff_value = ff_data['mean_fat_fraction']
+                            ff_info.append(f"ROI{i+1}: {ff_value:.3f}")
+                        else:
+                            ff_info.append(f"ROI{i+1}: 无FF值")
+                    else:
+                        ff_info.append(f"ROI{i+1}: 无FF值")
+                
+                info_text = f"ROI数量: {len(self.roi_list)}\n总面积: {total_area:.0f} 像素"
+                if ff_info:
+                    info_text += f"\nFF值: {', '.join(ff_info)}"
+                self.roi_info_var.set(info_text)
+            else:
+                self.roi_info_var.set("无ROI")
+        
+        # 更新右侧ROI计算结果框（交互模式专用）
+        self.update_interactive_output_display()
+    
+    def update_interactive_output_display(self):
+        """更新交互模式ROI计算结果显示"""
+        logger.debug(f"update_interactive_output_display 被调用，output_text存在: {hasattr(self, 'output_text') and self.output_text is not None}")
+        
+        if hasattr(self, 'output_text') and self.output_text:
+            self.output_text.delete(1.0, tk.END)
+            
+            if not self.roi_list:
+                self.output_text.insert(tk.END, "暂无ROI数据\n\n请绘制ROI区域")
+                return
+            
+            # 显示所有ROI的计算结果
+            output_lines = []
+            output_lines.append(f"ROI总数: {len(self.roi_list)}\n")
+            output_lines.append("=" * 40 + "\n")
+            
+            for i, roi in enumerate(self.roi_list):
+                output_lines.append(f"ROI #{i+1} ({roi['type']}):\n")
+                
+                if 'fat_fraction' in roi and roi['fat_fraction']:
+                    ff = roi['fat_fraction']
+                    
+                    # 检查FF数据结构
+                    if isinstance(ff, dict):
+                        # 交互模式的FF数据结构
+                        if 'fat_fraction' in ff:
+                            # 新的数据结构
+                            output_lines.append("【基本统计】\n")
+                            output_lines.append(f"  脂肪分数: {ff['fat_fraction']:.3f}\n")
+                            output_lines.append(f"  像素均值: {ff.get('mean_fat_fraction', 0):.2f}\n")
+                            output_lines.append(f"  标准差: {ff.get('std_fat_fraction', 0):.2f}\n")
+                            output_lines.append(f"  最小值: {ff.get('min_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  最大值: {ff.get('max_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  像素数量: {ff.get('pixel_count', 0):,}\n")
+                        else:
+                            # 旧的数据结构
+                            output_lines.append("【基本统计】\n")
+                            output_lines.append(f"  平均脂肪分数: {ff.get('mean_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  标准差: {ff.get('std_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  中位数: {ff.get('median_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  最小值: {ff.get('min_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  最大值: {ff.get('max_fat_fraction', 0):.3f}\n")
+                            output_lines.append(f"  像素数量: {ff.get('pixel_count', 0):,}\n")
+                            output_lines.append(f"  覆盖率: {ff.get('coverage_percentage', 0):.2f}%\n")
+                    else:
+                        # 简单的数值
+                        output_lines.append(f"  脂肪分数: {ff:.3f}\n")
+                    
+                    # 分布信息
+                    output_lines.append("\n【分布信息】\n")
+                    if isinstance(ff, dict) and 'fat_fraction' in ff:
+                        # 新数据结构
+                        range_val = ff.get('max_fat_fraction', 0) - ff.get('min_fat_fraction', 0)
+                        output_lines.append(f"  数值范围: {range_val:.3f}\n")
+                        mean_val = ff.get('mean_fat_fraction', 0)
+                        std_val = ff.get('std_fat_fraction', 0)
+                        cv = (std_val / mean_val) * 100 if mean_val > 0 else 0
+                        output_lines.append(f"  变异系数: {cv:.2f}%\n")
+                    else:
+                        # 旧数据结构
+                        range_val = ff.get('max_fat_fraction', 0) - ff.get('min_fat_fraction', 0)
+                        output_lines.append(f"  数值范围: {range_val:.3f}\n")
+                        cv = (ff.get('std_fat_fraction', 0) / ff.get('mean_fat_fraction', 1)) * 100 if ff.get('mean_fat_fraction', 0) > 0 else 0
+                        output_lines.append(f"  变异系数: {cv:.2f}%\n")
+                    
+                    # 质量评估
+                    output_lines.append("\n【质量评估】\n")
+                    if isinstance(ff, dict) and 'fat_fraction' in ff:
+                        # 新数据结构
+                        std_val = ff.get('std_fat_fraction', 0)
+                        if std_val < 0.05:
+                            quality = "优秀"
+                        elif std_val < 0.1:
+                            quality = "良好"
+                        elif std_val < 0.2:
+                            quality = "一般"
+                        else:
+                            quality = "较差"
+                        output_lines.append(f"  数据质量: {quality}\n")
+                    else:
+                        # 旧数据结构
+                        std_val = ff.get('std_fat_fraction', 0)
+                        if std_val < 0.05:
+                            quality = "优秀"
+                        elif std_val < 0.1:
+                            quality = "良好"
+                        elif std_val < 0.2:
+                            quality = "一般"
+                        else:
+                            quality = "较差"
+                        output_lines.append(f"  数据质量: {quality}\n")
+                        
+                        # 归一化信息
+                        if ff.get('normalized', False):
+                            output_lines.append(f"  归一化: 是\n")
+                        else:
+                            output_lines.append(f"  归一化: 否\n")
+                else:
+                    output_lines.append("  未计算脂肪分数\n")
+                
+                output_lines.append("=" * 40 + "\n")
+            
+            # 显示结果
+            result_text = "".join(output_lines)
+            self.output_text.insert(tk.END, result_text)
+            logger.debug(f"ROI计算结果框已更新，内容长度: {len(result_text)} 字符")
     
     def on_mouse_click(self, event):
         """鼠标点击事件"""
@@ -689,6 +940,7 @@ class BaseGUI:
             
             # 将结果保存到ROI中，确保包含所有必要字段
             roi['fat_fraction'] = {
+                'fat_fraction': result.get('mean_fat_fraction', 0),  # 添加简单的fat_fraction字段用于显示
                 'mean_fat_fraction': result.get('mean_fat_fraction', 0),
                 'std_fat_fraction': result.get('std_fat_fraction', 0),
                 'median_fat_fraction': result.get('median_fat_fraction', 0),
@@ -806,10 +1058,17 @@ class BaseGUI:
                 
                 # 添加标签
                 text_x = min(x1, x2)
-                text_y = min(y1, y2) - 5
+                text_y = max(15, min(y1, y2) - 5)  # 确保标签在图像内
                 label_text = f'ROI{i+1}'
                 if roi.get('fat_fraction') is not None:
-                    label_text += f' FF:{roi["fat_fraction"]:.3f}'
+                    ff_data = roi['fat_fraction']
+                    if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                        ff_value = ff_data['fat_fraction']
+                        label_text += f' FF:{ff_value:.3f}'
+                    elif isinstance(ff_data, (int, float)):
+                        label_text += f' FF:{ff_data:.3f}'
+                    else:
+                        label_text += f' FF:未知'
                 cv2.putText(image, label_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 
             elif roi['type'] == 'circle':
@@ -826,11 +1085,18 @@ class BaseGUI:
                 cv2.circle(image, (cx, cy), r, color, thickness)
                 
                 # 添加标签
-                text_x = cx - 20
-                text_y = cy - r - 5
+                text_x = max(5, cx - 20)
+                text_y = max(15, cy - r - 5)  # 确保标签在图像内
                 label_text = f'ROI{i+1}'
                 if roi.get('fat_fraction') is not None:
-                    label_text += f' FF:{roi["fat_fraction"]:.3f}'
+                    ff_data = roi['fat_fraction']
+                    if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                        ff_value = ff_data['fat_fraction']
+                        label_text += f' FF:{ff_value:.3f}'
+                    elif isinstance(ff_data, (int, float)):
+                        label_text += f' FF:{ff_data:.3f}'
+                    else:
+                        label_text += f' FF:未知'
                 cv2.putText(image, label_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 
             elif roi['type'] == 'polygon':
@@ -851,10 +1117,17 @@ class BaseGUI:
                 center_x = int(np.mean([p[0] for p in points]))
                 center_y = int(np.mean([p[1] for p in points]))
                 text_x = max(5, center_x - 30)
-                text_y = max(25, center_y - 5)
+                text_y = max(15, center_y - 5)  # 确保标签在图像内
                 label_text = f'ROI{i+1}'
                 if roi.get('fat_fraction') is not None:
-                    label_text += f' FF:{roi["fat_fraction"]:.3f}'
+                    ff_data = roi['fat_fraction']
+                    if isinstance(ff_data, dict) and 'fat_fraction' in ff_data:
+                        ff_value = ff_data['fat_fraction']
+                        label_text += f' FF:{ff_value:.3f}'
+                    elif isinstance(ff_data, (int, float)):
+                        label_text += f' FF:{ff_data:.3f}'
+                    else:
+                        label_text += f' FF:未知'
                 cv2.putText(image, label_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         
         return image
@@ -1122,7 +1395,18 @@ class BaseGUI:
         # 计算脂肪分数
         try:
             fat_fraction_data = self.calculate_single_roi_fat_fraction(roi)
-            roi['fat_fraction'] = fat_fraction_data
+            # 统一数据结构，添加fat_fraction字段用于显示
+            roi['fat_fraction'] = {
+                'fat_fraction': fat_fraction_data['mean_fat_fraction'],  # 用于显示
+                'mean_fat_fraction': fat_fraction_data['mean_fat_fraction'],
+                'std_fat_fraction': fat_fraction_data['std_fat_fraction'],
+                'median_fat_fraction': fat_fraction_data['median_fat_fraction'],
+                'min_fat_fraction': fat_fraction_data['min_fat_fraction'],
+                'max_fat_fraction': fat_fraction_data['max_fat_fraction'],
+                'pixel_count': fat_fraction_data['pixel_count'],
+                'coverage_percentage': fat_fraction_data['coverage_percentage'],
+                'normalized': fat_fraction_data['normalized']
+            }
             logger.info(f"ROI {roi['type']} 脂肪分数计算完成: {fat_fraction_data['mean_fat_fraction']:.3f}")
         except Exception as e:
             logger.warning(f"计算ROI脂肪分数失败: {str(e)}")
@@ -1140,7 +1424,11 @@ class BaseGUI:
         
         # 更新显示
         self.display_image()
-        self.update_output_display()
+        # 根据模式选择不同的更新方法
+        if hasattr(self, 'update_interactive_roi_info'):
+            self.update_interactive_roi_info()
+        else:
+            self.update_output_display()
         
         if hasattr(self, 'status_var') and self.status_var:
             self.status_var.set(f"已保存{self.current_roi_type}ROI")
@@ -1310,8 +1598,11 @@ class BaseGUI:
         self.roi_list.clear()
         self.results = {}
         logger.info("ROI数据已清理完成")
-        # 关闭窗口
-        self.root.destroy()
+        # 安全关闭窗口
+        try:
+            self.root.destroy()
+        except Exception as e:
+            logger.debug(f"关闭窗口时出现异常: {str(e)}")
     
     def set_output_directory(self):
         """设置输出目录"""
@@ -1357,12 +1648,61 @@ class BaseGUI:
         # 1. 尝试完全匹配
         base_name = os.path.splitext(image_file)[0]
         logger.debug(f"开始匹配标签文件，图像文件: {image_file}, 基础名称: {base_name}")
+        
+        # 1a. 首先尝试完全相同的文件名（图像和标签文件名完全一样）
+        label_path = os.path.join(self.batch_labels_dir, image_file)
+        logger.debug(f"尝试完全匹配相同文件名: {image_file} -> {label_path} (存在: {os.path.exists(label_path)})")
+        if os.path.exists(label_path):
+            logger.info(f"完全匹配相同文件名成功: {label_path}")
+            return label_path
+        
+        # 1b. 尝试基于文件名模式的匹配（如 images_xxx -> labels_xxx）
+        import re
+        
+        # 首先尝试处理文件名中的空格问题
+        clean_image_file = image_file.replace(' ', '')  # 移除空格
+        if clean_image_file != image_file:
+            logger.debug(f"检测到文件名中有空格，清理后: {image_file} -> {clean_image_file}")
+            # 尝试用清理后的文件名进行匹配
+            label_path = os.path.join(self.batch_labels_dir, clean_image_file)
+            logger.debug(f"尝试清理空格后完全匹配: {clean_image_file} -> {label_path} (存在: {os.path.exists(label_path)})")
+            if os.path.exists(label_path):
+                logger.info(f"清理空格后完全匹配成功: {label_path}")
+                return label_path
+        
+        # 检测常见的文件名模式转换
+        pattern_mappings = [
+            (r'^images_(.+)$', r'labels_\1'),  # images_xxx -> labels_xxx
+            (r'^img_(.+)$', r'label_\1'),      # img_xxx -> label_xxx
+            (r'^image_(.+)$', r'mask_\1'),     # image_xxx -> mask_xxx
+            (r'^(.+)_img$', r'\1_label'),      # xxx_img -> xxx_label
+            (r'^(.+)_image$', r'\1_mask'),     # xxx_image -> xxx_mask
+        ]
+        
+        # 对原始文件名和清理后的文件名都尝试模式匹配
+        files_to_try = [image_file]
+        if clean_image_file != image_file:
+            files_to_try.append(clean_image_file)
+        
+        for file_to_match in files_to_try:
+            for pattern, replacement in pattern_mappings:
+                match = re.match(pattern, file_to_match)
+                if match:
+                    # 生成可能的标签文件名
+                    possible_label_name = re.sub(pattern, replacement, file_to_match)
+                    label_path = os.path.join(self.batch_labels_dir, possible_label_name)
+                    logger.debug(f"尝试模式匹配: {file_to_match} -> {possible_label_name} -> {label_path} (存在: {os.path.exists(label_path)})")
+                    if os.path.exists(label_path):
+                        logger.info(f"模式匹配成功: {label_path}")
+                        return label_path
+        
+        # 1c. 尝试带_roi后缀的匹配
         for ext in label_extensions:
             label_file = f"{base_name}_roi{ext}"
             label_path = os.path.join(self.batch_labels_dir, label_file)
             logger.debug(f"尝试完全匹配: {label_file} -> {label_path} (存在: {os.path.exists(label_path)})")
             if os.path.exists(label_path):
-                logger.debug(f"完全匹配成功: {label_path}")
+                logger.info(f"完全匹配成功: {label_path}")
                 return label_path
         
         # 2. 尝试去掉数字后缀匹配（如 _0000, _0001 等）
@@ -1381,7 +1721,7 @@ class BaseGUI:
                 label_path = os.path.join(self.batch_labels_dir, label_file)
                 logger.debug(f"尝试带_roi后缀匹配: {label_file} -> {label_path} (存在: {os.path.exists(label_path)})")
                 if os.path.exists(label_path):
-                    logger.debug(f"带_roi后缀匹配成功: {label_path}")
+                    logger.info(f"带_roi后缀匹配成功: {label_path}")
                     return label_path
             
             # 2b. 尝试直接匹配（不带_roi后缀）
@@ -1390,7 +1730,7 @@ class BaseGUI:
                 label_path = os.path.join(self.batch_labels_dir, label_file)
                 logger.debug(f"尝试直接匹配: {label_file} -> {label_path} (存在: {os.path.exists(label_path)})")
                 if os.path.exists(label_path):
-                    logger.debug(f"直接匹配成功: {label_path}")
+                    logger.info(f"直接匹配成功: {label_path}")
                     return label_path
         else:
             logger.debug(f"未检测到数字后缀，跳过第二级匹配")
