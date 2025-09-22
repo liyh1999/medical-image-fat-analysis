@@ -117,25 +117,17 @@ Thumbs.db
 
 # Project specific
 logs/
-output/
+*.log
 temp/
-*.nii.gz
+output/
+results/
 *.nii
+*.nii.gz
 *.dcm
 *.dicom
-*.png
-*.jpg
-*.jpeg
-*.bmp
-*.tiff
-*.tif
-*.json
-*.csv
-*.xlsx
-*.xls
 
-# 临时文件
-*.tmp
-*.temp
-*.bak
-*.backup
+# Large files
+*.zip
+*.rar
+*.7z
+*.tar.gz
